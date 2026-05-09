@@ -9,8 +9,8 @@
 #include "esp_err.h"
 
 /* Configure these before flashing */
-#define WIFI_SSID      "SocLabs"
-#define WIFI_PASSWORD  "Semuapastibisa007"
+#define WIFI_SSID      "CosMoto"
+#define WIFI_PASSWORD  "konnichiwa"
 #define WIFI_MAX_RETRY 5
 
 /**
