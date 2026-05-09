@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 
-/* SSD1306 hardware config */
+/* SSD1306 hardware config — ESP32 DevKit (working: SDA=3, SCL=4) */
 #define DISPLAY_SDA_GPIO   3
 #define DISPLAY_SCL_GPIO   4
 #define DISPLAY_I2C_ADDR   0x3C

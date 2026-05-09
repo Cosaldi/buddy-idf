@@ -121,6 +121,7 @@ void display_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel));
     vTaskDelay(pdMS_TO_TICKS(50));   /* wait after init  */
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, true));
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_panel, true)); /* black bg = pixels off = less power */
     vTaskDelay(pdMS_TO_TICKS(100));  /* panel stabilise  */
     ESP_LOGI(TAG, "%s", "SSD1306 panel ready");
 
