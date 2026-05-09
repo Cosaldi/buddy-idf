@@ -41,7 +41,7 @@ void app_main(void)
     // touch_init();
 
     /* WiFi — blocks until connected or times out */
-    // wifi_manager_init();
+    wifi_manager_init();
 
     /* NTP — sync time after WiFi is up */
     // ntp_sync_init();
