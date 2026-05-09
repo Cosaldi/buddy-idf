@@ -44,7 +44,7 @@ void app_main(void)
     wifi_manager_init();
 
     /* NTP — sync time after WiFi is up */
-    // ntp_sync_init();
+    ntp_sync_init();
 
     /* Weather — initial fetch; subsequent fetches on a timer */
     // weather_init();
