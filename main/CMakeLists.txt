@@ -17,6 +17,7 @@ idf_component_register(
         esp_http_client
         esp_lcd
         driver
+        esp_driver_i2c
         log
         freertos
         # Managed components (resolved via idf_component.yml)

@@ -35,7 +35,7 @@ void app_main(void)
     ESP_LOGI(TAG, "%s", "=== DeskBuddy booting ===");
 
     /* Init display + LVGL first so splash can show during WiFi connect */
-    // display_init();
+    display_init();
 
     /* Touch (GPIO10, TTP223 — simple digital input) */
     // touch_init();
