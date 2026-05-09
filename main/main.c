@@ -38,7 +38,7 @@ void app_main(void)
     display_init();
 
     /* Touch (GPIO10, TTP223 — simple digital input) */
-    // touch_init();
+    touch_init();
 
     /* WiFi — blocks until connected or times out */
     wifi_manager_init();
