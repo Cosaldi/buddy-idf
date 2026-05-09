@@ -2,17 +2,18 @@
   "C_Cpp.intelliSenseEngine": "default",
   "idf.extensionActivationMode": "always",
   "idf.openOcdConfigs": [
-    "board/esp32-wrover-kit-3.3v.cfg"
+    "board/esp32c3-builtin.cfg"
   ],
-  "idf.port": "/dev/ttyUSB0",
+  "idf.port": "/dev/ttyACM0",
   "idf.currentSetup": "/home/cosaldi/.espressif/v6.0/esp-idf",
   "idf.customExtraVars": {
-    "IDF_TARGET": "esp32"
+    "IDF_TARGET": "esp32c3"
   },
   "clangd.path": "/home/cosaldi/.espressif/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clangd",
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=/home/cosaldi/Projects/esp32/own/deskbuddy/build"
-  ]
+  ],
+  "idf.flashType": "UART"
 }

@@ -1,0 +1,52 @@
+# ─────────────────────────────────────────────
+#  DeskBuddy — sdkconfig.defaults
+#  Target: ESP32-C3 Super Mini
+# ─────────────────────────────────────────────
+
+# ── Target ───────────────────────────────────
+CONFIG_IDF_TARGET="esp32c3"
+
+# ── Flash ────────────────────────────────────
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+
+# ── Partition table ──────────────────────────
+CONFIG_PARTITION_TABLE_SINGLE_APP=y
+
+# ── FreeRTOS ─────────────────────────────────
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_UNICORE=y          # C3 is single-core
+
+# ── Main task stack ──────────────────────────
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# ── WiFi ─────────────────────────────────────
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_TX_BUFFER_TYPE_DYNAMIC=y
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+
+# ── LwIP / SNTP (NTP) ────────────────────────
+CONFIG_LWIP_SNTP_UPDATE_DELAY=3600000   # re-sync every hour (ms)
+CONFIG_LWIP_SNTP_MAX_SERVERS=2
+
+# ── I2C (for SSD1306) ────────────────────────
+CONFIG_SOC_I2C_NUM=1
+
+# ── esp_lcd ──────────────────────────────────
+CONFIG_LCD_PANEL_IO_FORMAT_BUF_SIZE=32
+
+# ── LVGL (esp_lvgl_port picks these up) ──────
+CONFIG_LV_MEM_SIZE_KILOBYTES=48
+CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM=y
+
+# ── Logging ──────────────────────────────────
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+
+# ── Bootloader ───────────────────────────────
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+
+# ── Power / light sleep (optional, safe to keep) ─
+CONFIG_PM_ENABLE=n
