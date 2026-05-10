@@ -6,6 +6,7 @@ idf_component_register(
         "weather.c"
         "touch.c"
         "display.c"
+        "eye_anim.c"
     INCLUDE_DIRS
         "."
     REQUIRES
