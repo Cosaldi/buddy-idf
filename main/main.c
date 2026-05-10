@@ -47,7 +47,7 @@ void app_main(void)
     ntp_sync_init();
 
     /* Weather — initial fetch; subsequent fetches on a timer */
-    // weather_init();
+    weather_init();
 
     /* Hand off to main UI task */
     xTaskCreate(main_task, "main_task", 8192, NULL, 5, NULL);

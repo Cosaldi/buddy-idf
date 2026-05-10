@@ -4,7 +4,7 @@
 # ─────────────────────────────────────────────
 
 # ── Target ───────────────────────────────────
-# CONFIG_IDF_TARGET="esp32c3"
+CONFIG_IDF_TARGET="esp32"
 
 # ── Flash ────────────────────────────────────
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
@@ -18,8 +18,7 @@ CONFIG_PARTITION_TABLE_OFFSET=0x8000
 
 # ── FreeRTOS ─────────────────────────────────
 CONFIG_FREERTOS_HZ=1000
-# CONFIG_FREERTOS_UNICORE=y        # C3 is single-core
-                                   # ESP32 DevKit is dual-core, leave unset
+# CONFIG_FREERTOS_UNICORE — ESP32 DevKit is dual-core, leave unset
 
 # ── Main task stack ──────────────────────────
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

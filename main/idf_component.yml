@@ -12,10 +12,6 @@ dependencies:
   espressif/esp_lvgl_port:
     version: ">=1.4.0,<2.0.0"
 
-  # JSON parser — for OpenWeatherMap response
-  espressif/json_parser:
-    version: ">=1.0.3"
-
   # (esp_lcd SSD1306 driver is built into IDF >= 5.0, no extra dep needed)
 
   idf:
