@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -62,6 +63,9 @@ static void build_screen_weather(lv_obj_t *parent);
 static void build_screen_wifi(lv_obj_t *parent);
 static void clock_timer_cb(lv_timer_t *timer);
 static void eye_timer_cb(lv_timer_t *timer);
+
+static bool s_display_on = true;
+static uint32_t s_last_activity_ms = 0;
 
 /* ───────────────────────────────────────────────────────── */
 /*  display_init                                             */
@@ -266,6 +270,7 @@ static void eye_timer_cb(lv_timer_t *timer)
 
 void display_next_screen(void)
 {
+    s_last_activity_ms = esp_timer_get_time() / 1000; /* reset idle timer */
     display_screen_t prev = s_current_screen;
     s_current_screen = (display_screen_t)((s_current_screen + 1) % SCREEN_WIFI);  /* skip SCREEN_WIFI from normal cycle */
 
@@ -283,6 +288,8 @@ void display_next_screen(void)
 
 void display_set_screen(display_screen_t screen)
 {
+    s_last_activity_ms = esp_timer_get_time() / 1000; /* reset idle timer */
+
     if (screen >= SCREEN_COUNT) return;
     display_screen_t prev = s_current_screen;
     s_current_screen = screen;
@@ -346,4 +353,36 @@ void display_update_weather(const char *condition, float temp_c)
 void display_tick(void)
 {
     lv_tick_inc(1);
+}
+
+void display_reset_activity(void)
+{
+    s_last_activity_ms = esp_timer_get_time() / 1000;
+}
+
+void display_suspend(void)
+{
+    if (!s_display_on) return;
+    ESP_LOGI(TAG, "Suspending display (idle timeout)");
+    esp_lcd_panel_disp_on_off(s_panel, false);
+    s_display_on = false;
+}
+
+void display_resume(void)
+{
+    if (s_display_on) return;
+    ESP_LOGI(TAG, "Resuming display");
+    esp_lcd_panel_disp_on_off(s_panel, true);
+    s_display_on = true;
+    lv_disp_trig_activity(s_disp);
+}
+
+uint32_t display_get_last_activity_ms(void)
+{
+    return s_last_activity_ms;
+}
+
+bool display_is_suspended(void)
+{
+    return !s_display_on;
 }

@@ -11,6 +11,8 @@
  */
 #include <stdint.h>
 
+uint32_t display_get_last_activity_ms(void);
+
 /* SSD1306 hardware config */
 #define DISPLAY_SDA_GPIO   3
 #define DISPLAY_SCL_GPIO   4
@@ -18,6 +20,9 @@
 #define DISPLAY_WIDTH      128
 #define DISPLAY_HEIGHT     64
 #define DISPLAY_I2C_CLK_HZ 400000
+
+
+bool display_is_suspended(void);
 
 /* Screen indices */
 typedef enum {
@@ -57,3 +62,8 @@ void display_update_weather(const char *condition, float temp_c);
 
 /** @brief Tick — only needed if NOT using esp_lvgl_port auto-tick. */
 void display_tick(void);
+
+void display_suspend(void);
+void display_resume(void);
+void display_reset_activity(void);
+

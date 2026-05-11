@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -63,7 +64,14 @@ static void button_task(void *arg) {
     last_tick = ev.tick;
 
     if (ev.level == BUTTON_ACTIVE_LEVEL) {
-      /* Press start */
+      display_reset_activity();
+      
+      if (display_is_suspended()) {
+          display_resume();  /* just wake the screen */
+          pressing = false;
+          continue;
+      }
+      
       press_tick = ev.tick;
       pressing = true;
 

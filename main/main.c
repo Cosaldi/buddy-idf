@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -59,7 +60,15 @@ static void main_task(void *arg)
     (void)arg;  /* suppress unused-parameter warning */
     ESP_LOGI(TAG, "%s", "Main task started");
 
+    display_reset_activity();
+
     while (1) {
+        uint32_t now = esp_timer_get_time() / 1000;
+        uint32_t last_act = display_get_last_activity_ms();
+        if (now - last_act >= 30000) {
+            display_suspend();
+        }
+
         /* Touch drives screen transitions (handled inside display module
          * via touch_get_event()). We just keep the task alive and let
          * esp_lvgl_port handle the LVGL tick + flush in its own task. */
