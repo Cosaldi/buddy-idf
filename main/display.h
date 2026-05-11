@@ -10,8 +10,7 @@
  *   3 — WiFi     (setup portal info — shown on long press clock)
  */
 #include <stdint.h>
-
-uint32_t display_get_last_activity_ms(void);
+#include <stdbool.h>
 
 /* SSD1306 hardware config */
 #define DISPLAY_SDA_GPIO   3
@@ -19,10 +18,7 @@ uint32_t display_get_last_activity_ms(void);
 #define DISPLAY_I2C_ADDR   0x3C
 #define DISPLAY_WIDTH      128
 #define DISPLAY_HEIGHT     64
-#define DISPLAY_I2C_CLK_HZ 400000
-
-
-bool display_is_suspended(void);
+#define DISPLAY_I2C_CLK_HZ 100000
 
 /* Screen indices */
 typedef enum {
@@ -53,17 +49,27 @@ void display_show_wifi_setup(void);
 
 /**
  * @brief Cycle eye expression while on SCREEN_FACE.
- *        Normal → Happy → Angry → Sleepy → Surprised → Normal ...
+ *        Normal -> Happy -> Angry -> Sleepy -> Surprised -> Normal ...
  */
 void display_face_next_expression(void);
 
 /** @brief Update weather data. Safe to call from any task. */
 void display_update_weather(const char *condition, float temp_c);
 
-/** @brief Tick — only needed if NOT using esp_lvgl_port auto-tick. */
+/** @brief Tick -- only needed if NOT using esp_lvgl_port auto-tick. */
 void display_tick(void);
 
-void display_suspend(void);
-void display_resume(void);
+/** @brief Reset the idle activity timer (call on any user input). */
 void display_reset_activity(void);
 
+/** @brief Turn off display panel (idle timeout). */
+void display_suspend(void);
+
+/** @brief Turn on display panel and reset activity timer. */
+void display_resume(void);
+
+/** @brief Get last activity timestamp in ms. */
+uint32_t display_get_last_activity_ms(void);
+
+/** @brief Returns true if display is currently suspended. */
+bool display_is_suspended(void);
