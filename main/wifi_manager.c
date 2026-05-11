@@ -246,14 +246,20 @@ void wifi_manager_stop_portal(void)
     }
 
     /* Disable AP mode */
-    err = esp_wifi_set_mode(WIFI_MODE_NULL);
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
     if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT) {
-        ESP_LOGW(TAG, "esp_wifi_set_mode(NULL) failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "esp_wifi_set_mode(STA) failed: %s", esp_err_to_name(err));
+    }
+
+    /* Restart WiFi to reconnect to AP */
+    err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_start() failed: %s", esp_err_to_name(err));
     }
 
     s_connected = false;
 
-    ESP_LOGI(TAG, "SoftAP disabled");
+    ESP_LOGI(TAG, "SoftAP disabled, WiFi restarting to reconnect to AP");
 }
 
 /* ── Station connect ─────────────────────────────────────────────────── */
