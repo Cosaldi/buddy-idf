@@ -7,6 +7,7 @@
  *   0 — Face     (Akno-style animated eyes)
  *   1 — Clock    (HH:MM:SS + date)
  *   2 — Weather  (temp + condition)
+ *   3 — WiFi     (setup portal info — shown on long press clock)
  */
 #include <stdint.h>
 
@@ -23,27 +24,31 @@ typedef enum {
     SCREEN_FACE    = 0,
     SCREEN_CLOCK   = 1,
     SCREEN_WEATHER = 2,
+    SCREEN_WIFI    = 3,
     SCREEN_COUNT
 } display_screen_t;
 
 /** @brief Initialise I2C, SSD1306, LVGL, start eye animation. */
 void display_init(void);
 
-/** @brief Advance to next screen (wraps). Call from button handler. */
+/** @brief Advance to next screen (wraps, skips SCREEN_WIFI). */
 void display_next_screen(void);
 
 /** @brief Force-switch to a specific screen. */
 void display_set_screen(display_screen_t screen);
 
+/** @brief Returns the currently active screen. */
+display_screen_t display_get_screen(void);
+
+/**
+ * @brief Show WiFi setup screen (AP name + instructions).
+ *        Called by touch.c on long press of clock screen.
+ */
+void display_show_wifi_setup(void);
+
 /**
  * @brief Cycle eye expression while on SCREEN_FACE.
  *        Normal → Happy → Angry → Sleepy → Surprised → Normal ...
- *
- * Suggested button logic:
- *   if (current_screen == SCREEN_FACE)
- *       display_face_next_expression();
- *   else
- *       display_next_screen();
  */
 void display_face_next_expression(void);
 

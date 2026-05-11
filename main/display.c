@@ -1,5 +1,4 @@
-/*
- * DeskBuddy — display.c
+/* DeskBuddy — display.c
  * LVGL v8 + esp_lcd SSD1306 + esp_lvgl_port
  *
  * Screens:
@@ -60,6 +59,7 @@ static uint8_t s_eye_expr_idx = 0;
 static void build_screen_face(lv_obj_t *parent);
 static void build_screen_clock(lv_obj_t *parent);
 static void build_screen_weather(lv_obj_t *parent);
+static void build_screen_wifi(lv_obj_t *parent);
 static void clock_timer_cb(lv_timer_t *timer);
 static void eye_timer_cb(lv_timer_t *timer);
 
@@ -149,6 +149,7 @@ void display_init(void)
     build_screen_face(s_screens[SCREEN_FACE]);
     build_screen_clock(s_screens[SCREEN_CLOCK]);
     build_screen_weather(s_screens[SCREEN_WEATHER]);
+    build_screen_wifi(s_screens[SCREEN_WIFI]);
 
     lv_disp_load_scr(s_screens[SCREEN_FACE]);
 
@@ -169,6 +170,40 @@ void display_init(void)
 static void build_screen_face(lv_obj_t *parent)
 {
     eye_anim_init(parent);
+}
+
+/* ── WiFi setup screen ────────────────────────────────────── */
+static lv_obj_t *s_lbl_wifi_info = NULL;
+
+static void build_screen_wifi(lv_obj_t *parent)
+{
+    /* Title */
+    lv_obj_t *lbl_hdr = lv_label_create(parent);
+    lv_label_set_text(lbl_hdr, "WiFi Setup");
+    lv_obj_set_style_text_color(lbl_hdr, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_hdr, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_hdr, LV_ALIGN_TOP_MID, 0, 2);
+
+    /* Body text */
+    s_lbl_wifi_info = lv_label_create(parent);
+    lv_label_set_text(s_lbl_wifi_info,
+                      "Connect to:\n"
+                      "Buddy-Setup\n"
+                      "\n"
+                      "192.168.4.1");
+
+    lv_obj_set_style_text_color(s_lbl_wifi_info, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_wifi_info, &lv_font_montserrat_10, 0);
+
+    /* Center text on each line */
+    lv_obj_set_width(s_lbl_wifi_info, 128);
+    lv_obj_set_style_text_align(s_lbl_wifi_info, LV_TEXT_ALIGN_CENTER, 0);
+
+    /* Position under the title */
+    lv_obj_align(s_lbl_wifi_info, LV_ALIGN_TOP_MID, 0, 20);
+
+    /* Optional: allow wrapping if text is too long */
+    lv_label_set_long_mode(s_lbl_wifi_info, LV_LABEL_LONG_WRAP);
 }
 
 static void build_screen_clock(lv_obj_t *parent)
@@ -232,7 +267,7 @@ static void eye_timer_cb(lv_timer_t *timer)
 void display_next_screen(void)
 {
     display_screen_t prev = s_current_screen;
-    s_current_screen = (display_screen_t)((s_current_screen + 1) % SCREEN_COUNT);
+    s_current_screen = (display_screen_t)((s_current_screen + 1) % SCREEN_WIFI);  /* skip SCREEN_WIFI from normal cycle */
 
     if (prev == SCREEN_FACE && s_current_screen != SCREEN_FACE)
         eye_anim_set_idle(false);
@@ -260,6 +295,21 @@ void display_set_screen(display_screen_t screen)
     lvgl_port_lock(0);
     lv_disp_load_scr(s_screens[s_current_screen]);
     lvgl_port_unlock();
+}
+
+display_screen_t display_get_screen(void)
+{
+    return s_current_screen;
+}
+
+void display_show_wifi_setup(void)
+{
+    eye_anim_set_idle(false);
+    lvgl_port_lock(0);
+    s_current_screen = SCREEN_WIFI;
+    lv_disp_load_scr(s_screens[SCREEN_WIFI]);
+    lvgl_port_unlock();
+    ESP_LOGI(TAG, "%s", "WiFi setup screen shown");
 }
 
 void display_face_next_expression(void)
