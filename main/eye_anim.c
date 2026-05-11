@@ -16,6 +16,12 @@
  *   ANGRY     – top-inner corner gets a diagonal cut (filled triangle)
  *   SLEEPY    – eye height 40 % of normal, drooping
  *   SURPRISED – eye height 120 % of normal, wide open
+ *   WONDER    - eye widen (120% height), slight upward look
+ *   CUTE      - smaller eyes (60% height), add small pupil dot
+ *   SUSPICIOUS - one eye raised (diagonal cut on one side)
+ *   SAD        - eyes droop (shift down 4px), slight downward squint
+ *   CLOSE      - very narrow eyes (30% height
+ *   UPSET      - squinted eyes with diagonal cuts (similar to angry but both inner corners)
  *
  * Blink: height lerps 100 % → 0 % → 100 % over 6 frames × 20 ms
  */
@@ -50,7 +56,7 @@ static const char *TAG = "eye_anim";
 #define LOOK_DY   5
 
 /* Blink */
-#define BLINK_STEPS  4
+#define BLINK_STEPS  2
 
 /* Idle timing (ms) */
 #define IDLE_BLINK_MIN  2000
@@ -100,6 +106,24 @@ static uint32_t now_ms(void)
 static uint32_t rand_range(uint32_t lo, uint32_t hi)
 {
     return lo + (uint32_t)(esp_random() % (hi - lo + 1));
+}
+
+/* Draw small dot */
+static void draw_dot(int x, int y, int size, lv_color_t color)
+{
+    if (size <= 0) return;
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    dsc.bg_color = color;
+    dsc.bg_opa = LV_OPA_COVER;
+    dsc.border_width = 0;
+    dsc.radius = 0;
+    x = LV_MAX(x, 0);
+    y = LV_MAX(y, 0);
+    if (x + size > DISP_W) size = DISP_W - x;
+    if (y + size > DISP_H) size = DISP_H - y;
+    if (size > 0)
+        lv_canvas_draw_rect(g.canvas, x, y, size, size, &dsc);
 }
 
 /* ── Primitive: filled rounded rectangle ─────────────────── */
@@ -236,6 +260,9 @@ static void render_frame(void)
     float expr_h = 1.0f;
     if (g.expr == EYE_EXPR_HAPPY)     expr_h = 0.72f;
     if (g.expr == EYE_EXPR_SURPRISED) expr_h = 1.22f;
+    if (g.expr == EYE_EXPR_WONDER) expr_h = 1.20f;
+    if (g.expr == EYE_EXPR_CUTE) expr_h = 0.60f;
+    if (g.expr == EYE_EXPR_CLOSE) expr_h = 0.30f;
 
     int eye_h = (int)(EYE_H * expr_h * h_scale);
     if (eye_h < 1) eye_h = 1;
@@ -282,6 +309,51 @@ static void render_frame(void)
                     ex,           ey + cut_h,
                     black);
             }
+        }
+
+        // CUTE
+        if (g.expr == EYE_EXPR_CUTE && h_scale > 0.1f) {
+        /* Draw small cute pupils */
+            int pupil_size = 6;
+            draw_dot(cx - 4, ey + eye_h/2 - pupil_size/2, pupil_size, black);
+            draw_dot(cx + 4, ey + eye_h/2 - pupil_size/2, pupil_size, black);
+        }
+
+        // SUSPICIOUS
+        if (g.expr == EYE_EXPR_SUSPICIOUS && h_scale > 0.1f) {
+            /* Left eye: cut top-left corner */
+            draw_triangle(
+                ex, ey,
+                ex + 10, ey,
+                ex, ey + 10,
+                black);
+            
+            /* Right eye: normal */
+        }
+
+        // SAD
+        if (g.expr == EYE_EXPR_SAD) {
+            expr_h = 0.85f;
+            /* Shift eyes down temporarily */
+            g.cur_dy = LOOK_DY;  /* Use look offset for droop */
+        }
+
+        // UPSET
+        if (g.expr == EYE_EXPR_UPSET && h_scale > 0.1f) {
+            /* Both eyes: cut inner top corners */
+            /* Left eye - cut right side */
+            draw_triangle(
+                cx + EYE_W/2 - 8, ey,
+                cx + EYE_W/2, ey,
+                cx + EYE_W/2, ey + 8,
+                black);
+            
+            /* Right eye - cut left side */
+            draw_triangle(
+                cx - EYE_W/2 + 8, ey,
+                cx - EYE_W/2, ey,
+                cx - EYE_W/2, ey + 8,
+                black);
         }
     }
 
@@ -345,12 +417,19 @@ static void idle_tick(void)
 
     /* Fire a random non-NORMAL expression */
     if (g.expr == EYE_EXPR_NORMAL && t >= g.next_expr_ms) {
-        /* Pick from Happy, Angry, Sleepy, Surprised only */
+        /* Pick from expression only */
         static const eye_expression_t exprs[] = {
             EYE_EXPR_HAPPY,
             EYE_EXPR_ANGRY,
             EYE_EXPR_SLEEPY,
             EYE_EXPR_SURPRISED,
+            EYE_EXPR_WONDER,
+            EYE_EXPR_CUTE,
+            EYE_EXPR_SUSPICIOUS,
+            EYE_EXPR_SAD,
+            EYE_EXPR_CLOSE,
+            EYE_EXPR_UPSET,
+
         };
         g.expr           = exprs[esp_random() % (sizeof(exprs)/sizeof(exprs[0]))];
         g.expr_return_ms = t + rand_range(EXPR_HOLD_MIN, EXPR_HOLD_MAX);

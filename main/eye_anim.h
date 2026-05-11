@@ -13,6 +13,12 @@ typedef enum {
     EYE_EXPR_ANGRY,
     EYE_EXPR_SLEEPY,
     EYE_EXPR_SURPRISED,
+    EYE_EXPR_WONDER,
+    EYE_EXPR_CUTE,
+    EYE_EXPR_SUSPICIOUS,
+    EYE_EXPR_SAD,
+    EYE_EXPR_UPSET,
+    EYE_EXPR_CLOSE,
     EYE_EXPR_COUNT
 } eye_expression_t;
 
