@@ -19,6 +19,7 @@ typedef enum {
     EYE_EXPR_SAD,
     EYE_EXPR_UPSET,
     EYE_EXPR_CLOSE,
+    EYE_EXPR_LOVE,
     EYE_EXPR_COUNT
 } eye_expression_t;
 

@@ -126,6 +126,53 @@ static void draw_dot(int x, int y, int size, lv_color_t color)
         lv_canvas_draw_rect(g.canvas, x, y, size, size, &dsc);
 }
 
+/* Draw a larger pixel heart centered at (x, y)
+ *
+ * Shape (9x7):
+ *
+ *  . # # # . # # # .
+ *  # # # # # # # # #
+ *  # # # # # # # # #
+ *  . # # # # # # # .
+ *  . . # # # # # . .
+ *  . . . # # # . . .
+ *  . . . . # . . . .
+ *
+ * '#' = filled pixel
+ * '.' = empty pixel
+ */
+static void draw_heart_small(int x, int y, lv_color_t color)
+{
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    dsc.bg_color = color;
+    dsc.bg_opa = LV_OPA_COVER;
+    dsc.border_width = 0;
+    dsc.radius = 0;
+
+    /* Row 0: .###.###. */
+    lv_canvas_draw_rect(g.canvas, x + 1, y + 0, 3, 1, &dsc);
+    lv_canvas_draw_rect(g.canvas, x + 5, y + 0, 3, 1, &dsc);
+
+    /* Row 1: ######### */
+    lv_canvas_draw_rect(g.canvas, x + 0, y + 1, 9, 1, &dsc);
+
+    /* Row 2: ######### */
+    lv_canvas_draw_rect(g.canvas, x + 0, y + 2, 9, 1, &dsc);
+
+    /* Row 3: .#######. */
+    lv_canvas_draw_rect(g.canvas, x + 1, y + 3, 7, 1, &dsc);
+
+    /* Row 4: ..#####.. */
+    lv_canvas_draw_rect(g.canvas, x + 2, y + 4, 5, 1, &dsc);
+
+    /* Row 5: ...###... */
+    lv_canvas_draw_rect(g.canvas, x + 3, y + 5, 3, 1, &dsc);
+
+    /* Row 6: ....#.... */
+    lv_canvas_draw_rect(g.canvas, x + 4, y + 6, 1, 1, &dsc);
+}
+
 /* ── Primitive: filled rounded rectangle ─────────────────── */
 /*
  * Draws a filled rounded-rect on the canvas.
@@ -283,6 +330,12 @@ static void render_frame(void)
         /* White rounded rect */
         draw_rrect(ex, ey, EYE_W, eye_h, eye_r, white);
 
+        /* Draw pupil or heart */
+        if (g.expr == EYE_EXPR_LOVE && h_scale > 0.1f) {
+            /* Small heart instead of pupil */
+            draw_heart_small(cx - 3, cy - 3, black);
+        }
+
         /* ── HAPPY: clip bottom half → arch shape ── */
         if (g.expr == EYE_EXPR_HAPPY && h_scale > 0.1f) {
             /* fill the bottom portion black to flatten bottom */
@@ -429,6 +482,7 @@ static void idle_tick(void)
             EYE_EXPR_SAD,
             EYE_EXPR_CLOSE,
             EYE_EXPR_UPSET,
+            EYE_EXPR_LOVE,
 
         };
         g.expr           = exprs[esp_random() % (sizeof(exprs)/sizeof(exprs[0]))];
