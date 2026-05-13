@@ -1,42 +1,71 @@
-#pragma once
+/* -------------------------------------------------------------------------- */
+/* Buddy - wifi_manager.h                                                     */
+/*                                                                            */
+/* Wi-Fi manager public API.                                                  */
+/*                                                                            */
+/* Handles station connection, saved Wi-Fi credentials, softAP setup portal,  */
+/* and connection status.                                                     */
+/* -------------------------------------------------------------------------- */
 
-/*
- * DeskBuddy — wifi_manager.h
- * - Boot: loads SSID/password from NVS, connects as station.
- * - No credentials or connect fails → starts softAP + captive portal.
- * - Portal: connect phone to "DeskBuddy-Setup" WiFi,
- *           open browser → 192.168.4.1 → enter SSID/password
- *           → saved to NVS → device reboots → connects automatically.
- * - Long press clock → manually trigger portal via wifi_manager_start_portal().
- */
+#pragma once
 
 #include <stdbool.h>
 
-#define WIFI_AP_SSID            "Buddy-Setup"
-#define WIFI_AP_PASSWORD        ""       /* open AP — no password */
-#define WIFI_MAX_RETRY          5
+/* -------------------------------------------------------------------------- */
+/* Configuration                                                              */
+/* -------------------------------------------------------------------------- */
+
+/* SoftAP SSID used when the setup portal is active. */
+#define WIFI_AP_SSID "Buddy-Setup"
+
+/* Empty password means the setup AP is open. */
+#define WIFI_AP_PASSWORD ""
+
+/* Maximum reconnect attempts for one credential before trying the next one. */
+#define WIFI_MAX_RETRY 5
+
+/* Maximum time to wait for one connection attempt. */
 #define WIFI_CONNECT_TIMEOUT_MS 15000
 
+/* -------------------------------------------------------------------------- */
+/* Public API                                                                 */
+/* -------------------------------------------------------------------------- */
+
 /**
- * @brief Load credentials from NVS and connect as station.
- *        If no credentials found, starts portal automatically.
- *        Blocks until connected, failed, or portal is active.
+ * @brief Initialize Wi-Fi manager.
+ *
+ * Loads saved credentials from NVS and tries to connect as station.
+ *
+ * Behavior:
+ * - If saved credentials exist, tries them one by one.
+ * - If one network connects successfully, Wi-Fi stays connected.
+ * - If no credentials exist, starts the softAP setup portal.
+ * - If all credentials fail, Wi-Fi is stopped and retried later.
  */
 void wifi_manager_init(void);
 
 /**
- * @brief Manually start the softAP captive portal.
- *        Called by long press on clock screen.
- *        Saves credentials to NVS then reboots.
+ * @brief Start the softAP captive portal manually.
+ *
+ * The user can connect to WIFI_AP_SSID and open:
+ *
+ * http://192.168.4.1
+ *
+ * From the portal, the user can add, edit, or delete saved Wi-Fi networks.
  */
 void wifi_manager_start_portal(void);
 
 /**
- * @brief Stop the softAP when exit the screen
+ * @brief Stop the softAP captive portal.
+ *
+ * Stops the HTTP server and disables the setup AP.
  */
 void wifi_manager_stop_portal(void);
 
 /**
- * @brief Returns true if station is connected with an IP.
+ * @brief Check whether Wi-Fi station is connected.
+ *
+ * @return true if station is connected and has an IP address.
+ * @return false if station is disconnected.
  */
 bool wifi_manager_is_connected(void);

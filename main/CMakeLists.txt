@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "main.c"
+        "wifi_credentials.c"
         "wifi_manager.c"
         "ntp_sync.c"
         "weather.c"
