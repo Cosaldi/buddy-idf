@@ -351,12 +351,11 @@ void wifi_manager_init(void)
             return;
         }
 
-        ESP_LOGW(TAG, "Saved credentials failed — starting portal");
+        ESP_LOGW(TAG, "Saved credentials failed");
     } else {
         ESP_LOGI(TAG, "No saved credentials — starting portal");
+        wifi_manager_start_portal();
     }
-
-    wifi_manager_start_portal();
 }
 
 void wifi_manager_start_portal(void)
