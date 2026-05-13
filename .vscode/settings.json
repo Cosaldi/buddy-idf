@@ -1,19 +1,37 @@
 {
-  "C_Cpp.intelliSenseEngine": "default",
-  "idf.extensionActivationMode": "always",
-  "idf.openOcdConfigs": [
-    "board/esp32-wrover-kit-3.3v.cfg"
-  ],
-  "idf.port": "/dev/ttyUSB0",
-  "idf.currentSetup": "/home/cosaldi/.espressif/v6.0/esp-idf",
-  "idf.customExtraVars": {
-    "IDF_TARGET": "esp32"
-  },
-  "clangd.path": "/home/cosaldi/.espressif/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clangd",
-  "clangd.arguments": [
-    "--background-index",
-    "--query-driver=**",
-    "--compile-commands-dir=/home/cosaldi/Projects/esp32/own/deskbuddy/build"
-  ],
-  "idf.flashType": "UART"
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.extensionActivationMode": "always",
+    "idf.openOcdConfigs": [
+        "board/esp32-wrover-kit-3.3v.cfg"
+    ],
+    "idf.port": "/dev/ttyUSB0",
+    "idf.currentSetup": "/home/cosaldi/.espressif/v6.0/esp-idf",
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32"
+    },
+    "clangd.path": "/home/cosaldi/.espressif/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clangd",
+    "clangd.arguments": [
+        "--background-index",
+        "--query-driver=**",
+        "--compile-commands-dir=/home/cosaldi/Projects/esp32/own/deskbuddy/build"
+    ],
+    "idf.flashType": "UART",
+
+    "editor.detectIndentation": false,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+
+    "[c]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+    },
+
+    "[cpp]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+    }
 }
