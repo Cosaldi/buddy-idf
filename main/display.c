@@ -30,6 +30,12 @@
 #include "display.h"
 #include "eye_anim.h"
 
+#include "sdkconfig.h"
+
+#if CONFIG_DISPLAY_CONTROLLER_SH1106
+#include "esp_lcd_panel_sh1106.h"
+#endif
+
 static const char *TAG = "display";
 
 /* --- Handles --- */
@@ -119,20 +125,50 @@ void display_init(void)
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus, &io_cfg, &io_handle));
 
-    /* SSD1306 */
+    /* OLED panel */
     esp_lcd_panel_dev_config_t panel_cfg = {
         .bits_per_pixel = 1,
         .reset_gpio_num = -1,
     };
+
+#if CONFIG_DISPLAY_CONTROLLER_SSD1306
+
+    ESP_LOGI(TAG, "Using SSD1306 OLED driver");
+
     ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_cfg, &s_panel));
+
+#elif CONFIG_DISPLAY_CONTROLLER_SH1106
+
+    ESP_LOGI(TAG, "Using SH1106 OLED driver");
+
+    ESP_ERROR_CHECK(esp_lcd_new_panel_sh1106(io_handle, &panel_cfg, &s_panel));
+
+#else
+#error "No OLED display controller selected"
+#endif
+
     ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel));
     vTaskDelay(pdMS_TO_TICKS(50));
+
     ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel));
+
+#if CONFIG_DISPLAY_CONTROLLER_SH1106
+    ESP_ERROR_CHECK(esp_lcd_panel_set_gap(s_panel, CONFIG_DISPLAY_SH1106_GAP_X, 0));
+#endif
+
     vTaskDelay(pdMS_TO_TICKS(50));
+
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, true));
+
+#if CONFIG_DISPLAY_CONTROLLER_SH1106
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_panel, false));
+#else
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_panel, true));
+#endif
+
     vTaskDelay(pdMS_TO_TICKS(100));
-    ESP_LOGI(TAG, "%s", "SSD1306 ready");
+
+    ESP_LOGI(TAG, "OLED panel ready");
 
     /* LVGL port */
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
@@ -146,7 +182,18 @@ void display_init(void)
         .hres = DISPLAY_WIDTH,
         .vres = DISPLAY_HEIGHT,
         .monochrome = true,
-        .rotation = {.swap_xy = false, .mirror_x = false, .mirror_y = false},
+        .rotation =
+            {
+#if CONFIG_DISPLAY_CONTROLLER_SH1106
+                .swap_xy = true,
+                .mirror_x = true,
+                .mirror_y = true,
+#else
+                .swap_xy = false,
+                .mirror_x = false,
+                .mirror_y = false,
+#endif
+            },
     };
     s_disp = lvgl_port_add_disp(&disp_cfg);
     lv_disp_set_rotation(s_disp, LV_DISP_ROT_NONE);
@@ -349,7 +396,8 @@ void display_face_next_expression(void)
 
 void display_update_weather(const char *condition, float temp_c)
 {
-    if (!condition) {
+    if (!condition)
+    {
         return;
     }
 
@@ -358,11 +406,13 @@ void display_update_weather(const char *condition, float temp_c)
 
     lvgl_port_lock(0);
 
-    if (s_lbl_weather_cond) {
+    if (s_lbl_weather_cond)
+    {
         lv_label_set_text(s_lbl_weather_cond, condition);
     }
 
-    if (s_lbl_weather_temp) {
+    if (s_lbl_weather_temp)
+    {
         lv_label_set_text(s_lbl_weather_temp, temp_str);
     }
 

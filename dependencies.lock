@@ -24,10 +24,18 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 8.3.11
+  tny-robotics/sh1106-esp-idf:
+    component_hash: b7a0cd10a16a249142b400014ad41716fb5420b4b55e08b9693e5911d9949a49
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.1
 direct_dependencies:
 - espressif/esp_lvgl_port
 - idf
 - lvgl/lvgl
-manifest_hash: 4b2eb0a3652ce93a047e41e22e78aecc97ce18293d18c5c9b55eb4d12a8436de
+- tny-robotics/sh1106-esp-idf
+manifest_hash: 0368c6e59ecdae7561f1a10cdcfc10da7edca917926d9c1452fcbc42df8aabf8
 target: esp32
 version: 3.0.0

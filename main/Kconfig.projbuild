@@ -1,0 +1,19 @@
+menu "BUDDY Display"
+
+    choice DISPLAY_CONTROLLER
+        prompt "OLED controller"
+        default DISPLAY_CONTROLLER_SSD1306
+
+        config DISPLAY_CONTROLLER_SSD1306
+            bool "SSD1306 OLED"
+
+        config DISPLAY_CONTROLLER_SH1106
+            bool "SSH1106 OLED"
+    endchoice
+
+    config DISPLAY_SH1106_GAP_X
+        int "SSH1106 X gap"
+        default 2
+        depends on DISPLAY_CONTROLLER_SH1106
+
+endmenu

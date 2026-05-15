@@ -1,18 +1,19 @@
 ## IDF Component Manager manifest
 ## Place this file at: main/idf_component.yml
 
-version: "1.0.0"
+version: 1.0.0
 
 dependencies:
   # LVGL v8 — graphics library
   lvgl/lvgl:
-    version: "~8.3.0"
+    version: ~8.3.0
 
   # Espressif LVGL port — handles display flush, tick, task
   espressif/esp_lvgl_port:
-    version: ">=1.4.0,<2.0.0"
+    version: '>=1.4.0,<2.0.0'
 
   # (esp_lcd SSD1306 driver is built into IDF >= 5.0, no extra dep needed)
 
   idf:
-    version: ">=5.1.0"
+    version: '>=5.1.0'
+  tny-robotics/sh1106-esp-idf: ^1.0.1
