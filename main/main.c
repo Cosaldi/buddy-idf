@@ -65,7 +65,7 @@ static void main_task(void *arg)
     while (1) {
         uint32_t now = esp_timer_get_time() / 1000;
         uint32_t last_act = display_get_last_activity_ms();
-        if (now - last_act >= 30000) {
+        if (now - last_act >= 90000) {
             display_suspend();
         }
 
