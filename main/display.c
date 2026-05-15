@@ -1,6 +1,9 @@
-/* DeskBuddy — display.c
- * LVGL v8 + esp_lcd SSD1306 + esp_lvgl_port
- *
+/* -------------------------------------------------------------------------- */
+/* Buddy — display.c                                                          */
+/*                                                                            */
+/* LVGL v8 + esp_lcd SSD1306 + esp_lvgl_port                                  */
+/* -------------------------------------------------------------------------- */
+/* 
  * Screens:
  *   SCREEN_FACE    — Akno-style animated eyes (eye_anim module)
  *   SCREEN_CLOCK   — live HH:MM:SS + date
@@ -29,23 +32,23 @@
 
 static const char *TAG = "display";
 
-/* ── Handles ─────────────────────────────────────────────── */
-static esp_lcd_panel_handle_t  s_panel = NULL;
-static lv_disp_t              *s_disp  = NULL;
+/* --- Handles --- */
+static esp_lcd_panel_handle_t s_panel = NULL;
+static lv_disp_t *s_disp = NULL;
 
-/* ── Screen state ────────────────────────────────────────── */
-static display_screen_t  s_current_screen = SCREEN_FACE;
-static lv_obj_t         *s_screens[SCREEN_COUNT];
+/* --- Screen state --- */
+static display_screen_t s_current_screen = SCREEN_FACE;
+static lv_obj_t *s_screens[SCREEN_COUNT];
 
-/* ── Clock widgets ───────────────────────────────────────── */
+/* --- Clock widgets --- */
 static lv_obj_t *s_lbl_time = NULL;
 static lv_obj_t *s_lbl_date = NULL;
 
-/* ── Weather widgets ─────────────────────────────────────── */
+/* --- Weather widgets --- */
 static lv_obj_t *s_lbl_weather_cond = NULL;
 static lv_obj_t *s_lbl_weather_temp = NULL;
 
-/* ── Eye expression cycling ──────────────────────────────── */
+/* --- Eye expression cycling --- */
 static const eye_expression_t EYE_EXPRESSIONS[] = {
     EYE_EXPR_NORMAL,
     EYE_EXPR_HAPPY,
@@ -56,7 +59,10 @@ static const eye_expression_t EYE_EXPRESSIONS[] = {
 #define EYE_EXPR_COUNT_LOCAL (sizeof(EYE_EXPRESSIONS) / sizeof(EYE_EXPRESSIONS[0]))
 static uint8_t s_eye_expr_idx = 0;
 
-/* ── Forward declarations ────────────────────────────────── */
+static const char *EYE_TEST_TAG = "EYE_TEST";
+
+/* --- Forward declarations --- */
+static void eye_test_all_task(void *arg);
 static void build_screen_face(lv_obj_t *parent);
 static void build_screen_clock(lv_obj_t *parent);
 static void build_screen_weather(lv_obj_t *parent);
@@ -67,19 +73,20 @@ static void eye_timer_cb(lv_timer_t *timer);
 static bool s_display_on = true;
 static uint32_t s_last_activity_ms = 0;
 
-/* ───────────────────────────────────────────────────────── */
-/*  display_init                                             */
-/* ───────────────────────────────────────────────────────── */
+/* -------------------------------------------------------------------------- */
+/* Display init                                                               */
+/* -------------------------------------------------------------------------- */
+
 void display_init(void)
 {
     ESP_LOGI(TAG, "%s", "Initialising display");
 
     /* I2C master bus */
     i2c_master_bus_config_t bus_cfg = {
-        .i2c_port          = I2C_NUM_0,
-        .sda_io_num        = DISPLAY_SDA_GPIO,
-        .scl_io_num        = DISPLAY_SCL_GPIO,
-        .clk_source        = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = I2C_NUM_0,
+        .sda_io_num = DISPLAY_SDA_GPIO,
+        .scl_io_num = DISPLAY_SCL_GPIO,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
@@ -89,23 +96,26 @@ void display_init(void)
     /* I2C scanner */
     ESP_LOGI(TAG, "%s", "Scanning I2C bus...");
     bool found = false;
-    for (uint8_t addr = 0x08; addr < 0x78; addr++) {
-        if (i2c_master_probe(i2c_bus, addr, pdMS_TO_TICKS(50)) == ESP_OK) {
+    for (uint8_t addr = 0x08; addr < 0x78; addr++)
+    {
+        if (i2c_master_probe(i2c_bus, addr, pdMS_TO_TICKS(50)) == ESP_OK)
+        {
             ESP_LOGI(TAG, "I2C device found at 0x%02X", addr);
             found = true;
         }
     }
-    if (!found) ESP_LOGE(TAG, "%s", "No I2C devices found!");
+    if (!found)
+        ESP_LOGE(TAG, "%s", "No I2C devices found!");
 
     /* Panel IO */
     esp_lcd_panel_io_handle_t io_handle = NULL;
     esp_lcd_panel_io_i2c_config_t io_cfg = {
-        .dev_addr            = DISPLAY_I2C_ADDR,
+        .dev_addr = DISPLAY_I2C_ADDR,
         .control_phase_bytes = 1,
-        .dc_bit_offset       = 6,
-        .lcd_cmd_bits        = 8,
-        .lcd_param_bits      = 8,
-        .scl_speed_hz        = 100000,
+        .dc_bit_offset = 6,
+        .lcd_cmd_bits = 8,
+        .lcd_param_bits = 8,
+        .scl_speed_hz = 100000,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus, &io_cfg, &io_handle));
 
@@ -129,14 +139,14 @@ void display_init(void)
     ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
 
     const lvgl_port_display_cfg_t disp_cfg = {
-        .io_handle     = io_handle,
-        .panel_handle  = s_panel,
-        .buffer_size   = DISPLAY_WIDTH * DISPLAY_HEIGHT,
+        .io_handle = io_handle,
+        .panel_handle = s_panel,
+        .buffer_size = DISPLAY_WIDTH * DISPLAY_HEIGHT,
         .double_buffer = false,
-        .hres          = DISPLAY_WIDTH,
-        .vres          = DISPLAY_HEIGHT,
-        .monochrome    = true,
-        .rotation      = { .swap_xy = false, .mirror_x = false, .mirror_y = false },
+        .hres = DISPLAY_WIDTH,
+        .vres = DISPLAY_HEIGHT,
+        .monochrome = true,
+        .rotation = {.swap_xy = false, .mirror_x = false, .mirror_y = false},
     };
     s_disp = lvgl_port_add_disp(&disp_cfg);
     lv_disp_set_rotation(s_disp, LV_DISP_ROT_NONE);
@@ -144,7 +154,8 @@ void display_init(void)
     /* Build screens */
     lvgl_port_lock(0);
 
-    for (int i = 0; i < SCREEN_COUNT; i++) {
+    for (int i = 0; i < SCREEN_COUNT; i++)
+    {
         s_screens[i] = lv_obj_create(NULL);
         lv_obj_set_style_bg_color(s_screens[i], lv_color_black(), 0);
         lv_obj_set_style_bg_opa(s_screens[i], LV_OPA_COVER, 0);
@@ -167,16 +178,18 @@ void display_init(void)
     ESP_LOGI(TAG, "%s", "Display ready");
 }
 
-/* ───────────────────────────────────────────────────────── */
-/*  Screen builders                                          */
-/* ───────────────────────────────────────────────────────── */
+/* -------------------------------------------------------------------------- */
+/* Screen builders                                                            */
+/* -------------------------------------------------------------------------- */
 
 static void build_screen_face(lv_obj_t *parent)
 {
     eye_anim_init(parent);
+
+    // xTaskCreate(eye_test_all_task, "eye_test_all", 4096, NULL, 5, NULL);
 }
 
-/* ── WiFi setup screen ────────────────────────────────────── */
+/* --- WiFi setup screen --- */
 static lv_obj_t *s_lbl_wifi_info = NULL;
 
 static void build_screen_wifi(lv_obj_t *parent)
@@ -242,14 +255,15 @@ static void build_screen_weather(lv_obj_t *parent)
     lv_obj_align(s_lbl_weather_temp, LV_ALIGN_CENTER, 0, 14);
 }
 
-/* ───────────────────────────────────────────────────────── */
-/*  Timer callbacks                                          */
-/* ───────────────────────────────────────────────────────── */
+/* -------------------------------------------------------------------------- */
+/* Timer callbacks                                                            */
+/* -------------------------------------------------------------------------- */
 
 static void clock_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    if (s_current_screen != SCREEN_CLOCK) return;
+    if (s_current_screen != SCREEN_CLOCK)
+        return;
     char time_buf[16], date_buf[24];
     ntp_get_time_str(time_buf, sizeof(time_buf));
     ntp_get_date_str(date_buf, sizeof(date_buf));
@@ -260,19 +274,21 @@ static void clock_timer_cb(lv_timer_t *timer)
 static void eye_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    if (s_current_screen != SCREEN_FACE) return;
+    if (s_current_screen != SCREEN_FACE)
+        return;
     eye_anim_tick();
 }
 
-/* ───────────────────────────────────────────────────────── */
-/*  Public API                                               */
-/* ───────────────────────────────────────────────────────── */
+/* -------------------------------------------------------------------------- */
+/* Public API                                                                 */
+/* -------------------------------------------------------------------------- */
 
 void display_next_screen(void)
 {
     s_last_activity_ms = esp_timer_get_time() / 1000; /* reset idle timer */
     display_screen_t prev = s_current_screen;
-    s_current_screen = (display_screen_t)((s_current_screen + 1) % SCREEN_WIFI);  /* skip SCREEN_WIFI from normal cycle */
+    s_current_screen = (display_screen_t)((s_current_screen + 1) %
+                                          SCREEN_WIFI); /* skip SCREEN_WIFI from normal cycle */
 
     if (prev == SCREEN_FACE && s_current_screen != SCREEN_FACE)
         eye_anim_set_idle(false);
@@ -290,7 +306,8 @@ void display_set_screen(display_screen_t screen)
 {
     s_last_activity_ms = esp_timer_get_time() / 1000; /* reset idle timer */
 
-    if (screen >= SCREEN_COUNT) return;
+    if (screen >= SCREEN_COUNT)
+        return;
     display_screen_t prev = s_current_screen;
     s_current_screen = screen;
 
@@ -327,12 +344,17 @@ void display_face_next_expression(void)
 }
 
 /* Weather update — safe from any task */
-typedef struct { char condition[32]; float temp_c; } weather_update_t;
+typedef struct
+{
+    char condition[32];
+    float temp_c;
+} weather_update_t;
 
 static void weather_async_cb(void *user_data)
 {
     weather_update_t *d = (weather_update_t *)user_data;
-    if (!d) return;
+    if (!d)
+        return;
     char temp_str[16];
     snprintf(temp_str, sizeof(temp_str), "%.1f C", d->temp_c);
     lv_label_set_text(s_lbl_weather_cond, d->condition);
@@ -343,7 +365,8 @@ static void weather_async_cb(void *user_data)
 void display_update_weather(const char *condition, float temp_c)
 {
     weather_update_t *d = malloc(sizeof(weather_update_t));
-    if (!d) return;
+    if (!d)
+        return;
     strncpy(d->condition, condition, sizeof(d->condition) - 1);
     d->condition[sizeof(d->condition) - 1] = '\0';
     d->temp_c = temp_c;
@@ -362,7 +385,8 @@ void display_reset_activity(void)
 
 void display_suspend(void)
 {
-    if (!s_display_on) return;
+    if (!s_display_on)
+        return;
     ESP_LOGI(TAG, "Suspending display (idle timeout)");
     esp_lcd_panel_disp_on_off(s_panel, false);
     s_display_on = false;
@@ -370,7 +394,8 @@ void display_suspend(void)
 
 void display_resume(void)
 {
-    if (s_display_on) return;
+    if (s_display_on)
+        return;
     ESP_LOGI(TAG, "Resuming display");
     esp_lcd_panel_disp_on_off(s_panel, true);
     s_display_on = true;
@@ -385,4 +410,50 @@ uint32_t display_get_last_activity_ms(void)
 bool display_is_suspended(void)
 {
     return !s_display_on;
+}
+
+static void eye_test_all_task(void *arg)
+{
+    (void)arg;
+
+    typedef struct
+    {
+        eye_expression_t expr;
+        const char *name;
+    } eye_test_item_t;
+
+    static const eye_test_item_t tests[] = {
+        {EYE_EXPR_NORMAL, "NORMAL"},
+        {EYE_EXPR_HAPPY, "HAPPY"},
+        {EYE_EXPR_ANGRY, "ANGRY"},
+        {EYE_EXPR_SLEEPY, "SLEEPY"},
+        {EYE_EXPR_SURPRISED, "SURPRISED"},
+        {EYE_EXPR_WONDER, "WONDER"},
+        {EYE_EXPR_CUTE, "CUTE"},
+        {EYE_EXPR_SUSPICIOUS, "SUSPICIOUS"},
+        {EYE_EXPR_SAD, "SAD"},
+        {EYE_EXPR_CLOSE, "CLOSE"},
+        {EYE_EXPR_UPSET, "UPSET"},
+        {EYE_EXPR_LOVE, "LOVE"},
+    };
+
+    const int count = sizeof(tests) / sizeof(tests[0]);
+
+    /* Stop random idle expressions */
+    eye_anim_set_idle(false);
+
+    while (1)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            ESP_LOGI(EYE_TEST_TAG, "Testing eye: %s", tests[i].name);
+
+            eye_anim_set_expression(tests[i].expr);
+
+            /* Optional blink before each expression */
+            eye_anim_blink();
+
+            vTaskDelay(pdMS_TO_TICKS(2500));
+        }
+    }
 }
