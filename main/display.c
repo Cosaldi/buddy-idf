@@ -343,34 +343,30 @@ void display_face_next_expression(void)
     ESP_LOGI(TAG, "Eye expression -> %d", EYE_EXPRESSIONS[s_eye_expr_idx]);
 }
 
-/* Weather update — safe from any task */
-typedef struct
-{
-    char condition[32];
-    float temp_c;
-} weather_update_t;
-
-static void weather_async_cb(void *user_data)
-{
-    weather_update_t *d = (weather_update_t *)user_data;
-    if (!d)
-        return;
-    char temp_str[16];
-    snprintf(temp_str, sizeof(temp_str), "%.1f C", d->temp_c);
-    lv_label_set_text(s_lbl_weather_cond, d->condition);
-    lv_label_set_text(s_lbl_weather_temp, temp_str);
-    free(d);
-}
+/* -------------------------------------------------------------------------- */
+/* Weather update                                                             */
+/* -------------------------------------------------------------------------- */
 
 void display_update_weather(const char *condition, float temp_c)
 {
-    weather_update_t *d = malloc(sizeof(weather_update_t));
-    if (!d)
+    if (!condition) {
         return;
-    strncpy(d->condition, condition, sizeof(d->condition) - 1);
-    d->condition[sizeof(d->condition) - 1] = '\0';
-    d->temp_c = temp_c;
-    lv_async_call(weather_async_cb, d);
+    }
+
+    char temp_str[16];
+    snprintf(temp_str, sizeof(temp_str), "%.1f C", temp_c);
+
+    lvgl_port_lock(0);
+
+    if (s_lbl_weather_cond) {
+        lv_label_set_text(s_lbl_weather_cond, condition);
+    }
+
+    if (s_lbl_weather_temp) {
+        lv_label_set_text(s_lbl_weather_temp, temp_str);
+    }
+
+    lvgl_port_unlock();
 }
 
 void display_tick(void)
