@@ -9,7 +9,7 @@
  * Uses ANYEDGE: falling = press start, rising = press end.
  * Hold duration measured in button task — ISR is minimal.
  */
- 
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -56,76 +56,104 @@ static void button_task(void *arg)
     btn_event_t ev;
     uint32_t press_tick = 0;
     bool pressing = false;
+    bool long_fired = false;
     uint32_t last_tick = 0;
 
     const uint32_t debounce = pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS);
-    const uint32_t long_ms = pdMS_TO_TICKS(BUTTON_LONG_PRESS_MS);
+    const uint32_t long_ticks = pdMS_TO_TICKS(BUTTON_LONG_PRESS_MS);
 
     while (1)
     {
-        if (!xQueueReceive(s_evt_queue, &ev, portMAX_DELAY))
-            continue;
-
-        /* Debounce */
-        if ((ev.tick - last_tick) < debounce)
-            continue;
-        last_tick = ev.tick;
-
-        if (ev.level == BUTTON_ACTIVE_LEVEL)
+        /*
+         * Wake every 20 ms even if there is no edge event.
+         * This lets us detect long press while the finger is still touching.
+         */
+        if (xQueueReceive(s_evt_queue, &ev, pdMS_TO_TICKS(20)))
         {
-            display_reset_activity();
-
-            if (display_is_suspended())
-            {
-                display_resume(); /* just wake the screen */
-                pressing = false;
+            /* Debounce */
+            if ((ev.tick - last_tick) < debounce) {
                 continue;
             }
+            last_tick = ev.tick;
 
-            press_tick = ev.tick;
-            pressing = true;
-        }
-        else if (pressing)
-        {
-            /* Press end — measure hold duration */
-            pressing = false;
-            uint32_t held = ev.tick - press_tick;
-
-            if (held >= long_ms)
+            if (ev.level == BUTTON_ACTIVE_LEVEL)
             {
+                display_reset_activity();
+
+                if (display_is_suspended())
+                {
+                    display_resume(); /* just wake the screen */
+                    pressing = false;
+                    long_fired = false;
+                    continue;
+                }
+
+                press_tick = ev.tick;
+                pressing = true;
+                long_fired = false;
+            }
+            else if (pressing)
+            {
+                /* Release */
+                uint32_t held = ev.tick - press_tick;
+
+                pressing = false;
+
+                /*
+                 * If long press already fired while holding,
+                 * do not also trigger short press on release.
+                 */
+                if (long_fired) {
+                    long_fired = false;
+                    continue;
+                }
+
+                if (held >= debounce)
+                {
+                    /* Short press */
+                    ESP_LOGI(TAG, "Short press (%lu ms)", (unsigned long)pdTICKS_TO_MS(held));
+
+                    if (display_get_screen() == SCREEN_WIFI)
+                    {
+                        ESP_LOGI(TAG, "Short press ignored on WiFi setup screen");
+                        continue;
+                    }
+
+                    display_next_screen();
+                }
+            }
+        }
+
+        /*
+         * Long press check while still touching.
+         * This fires once after BUTTON_LONG_PRESS_MS, no need to release.
+         */
+        if (pressing && !long_fired)
+        {
+            uint32_t now = (uint32_t)xTaskGetTickCount();
+
+            if ((now - press_tick) >= long_ticks)
+            {
+                long_fired = true;
+                display_reset_activity();
+
                 if (display_get_screen() == SCREEN_FACE)
                 {
+                    ESP_LOGI(TAG, "Long press on face -> expression combo");
                     eye_anim_play_combo();
                 }
                 else if (display_get_screen() == SCREEN_CLOCK)
                 {
-                    /* From clock -> enter WiFi setup and start SoftAP */
                     ESP_LOGI(TAG, "Long press on clock -> WiFi setup");
                     display_show_wifi_setup();
                     wifi_manager_start_portal();
                 }
                 else if (display_get_screen() == SCREEN_WIFI)
                 {
-                    /* From WiFi setup -> stop SoftAP and return to clock */
                     ESP_LOGI(TAG, "Long press on WiFi setup -> exit");
                     wifi_manager_stop_portal();
                     display_set_screen(SCREEN_CLOCK);
                 }
-            }
-            else if (held >= debounce)
-            {
-                /* ── Short press ── */
-                ESP_LOGI(TAG, "Short press (%lu ms)", (unsigned long)held);
-
-                /* Ignore short press while WiFi setup screen is shown */
-                if (display_get_screen() == SCREEN_WIFI)
-                {
-                    ESP_LOGI(TAG, "Short press ignored on WiFi setup screen");
-                    continue;
-                }
-
-                /* Normal behavior for other screens */
-                display_next_screen();
             }
         }
     }
