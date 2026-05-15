@@ -123,7 +123,30 @@ static struct
     uint32_t next_look_ms;
     uint32_t next_expr_ms;   /* when to change expression          */
     uint32_t expr_return_ms; /* when to return to NORMAL            */
+
+    /* combo animation */
+    bool combo_active;
+    int combo_index;
+    uint32_t combo_next_ms;
+    bool combo_restore_idle;
 } g;
+
+typedef struct {
+    eye_expression_t expr;
+    uint32_t hold_ms;
+    bool blink;
+} eye_combo_step_t;
+
+static const eye_combo_step_t s_combo[] = {
+    { EYE_EXPR_NORMAL,  300, true  },
+    { EYE_EXPR_WONDER,  900, false },
+    { EYE_EXPR_CUTE,    900, true  },
+    { EYE_EXPR_LOVE,   1000, false },
+    { EYE_EXPR_HAPPY,   900, true  },
+    { EYE_EXPR_NORMAL,  500, false },
+};
+
+#define EYE_COMBO_COUNT (sizeof(s_combo) / sizeof(s_combo[0]))
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -216,13 +239,13 @@ static void draw_heart_small(int x, int y, lv_color_t color)
 static void draw_heart_big(int cx, int cy, lv_color_t color)
 {
     static const uint8_t heart[7][9] = {
-        {0,1,1,1,0,1,1,1,0},
-        {1,1,1,1,1,1,1,1,1},
-        {1,1,1,1,1,1,1,1,1},
-        {0,1,1,1,1,1,1,1,0},
-        {0,0,1,1,1,1,1,0,0},
-        {0,0,0,1,1,1,0,0,0},
-        {0,0,0,0,1,0,0,0,0},
+        {0, 1, 1, 1, 0, 1, 1, 1, 0},
+        {1, 1, 1, 1, 1, 1, 1, 1, 1},
+        {1, 1, 1, 1, 1, 1, 1, 1, 1},
+        {0, 1, 1, 1, 1, 1, 1, 1, 0},
+        {0, 0, 1, 1, 1, 1, 1, 0, 0},
+        {0, 0, 0, 1, 1, 1, 0, 0, 0},
+        {0, 0, 0, 0, 1, 0, 0, 0, 0},
     };
 
     const int scale = 2;
@@ -232,15 +255,13 @@ static void draw_heart_big(int cx, int cy, lv_color_t color)
     int x0 = cx - w / 2;
     int y0 = cy - h / 2;
 
-    for (int y = 0; y < 7; y++) {
-        for (int x = 0; x < 9; x++) {
-            if (heart[y][x]) {
-                draw_dot(
-                    x0 + x * scale,
-                    y0 + y * scale,
-                    scale,
-                    color
-                );
+    for (int y = 0; y < 7; y++)
+    {
+        for (int x = 0; x < 9; x++)
+        {
+            if (heart[y][x])
+            {
+                draw_dot(x0 + x * scale, y0 + y * scale, scale, color);
             }
         }
     }
@@ -441,31 +462,39 @@ static void render_frame(void)
         int cx = centres[i] + g.cur_dx;
         int cy = EYE_CY + g.cur_dy;
 
-        if (g.expr == EYE_EXPR_SAD) {
+        if (g.expr == EYE_EXPR_SAD)
+        {
             cy += 4;
         }
 
-        if (g.expr == EYE_EXPR_CUTE) {
+        if (g.expr == EYE_EXPR_CUTE)
+        {
             cy += 2;
         }
 
         int this_eye_h = eye_h;
 
         /* --- WONDER: one eye smaller, one eye bigger --- */
-        if (g.expr == EYE_EXPR_WONDER) {
-            if (i == 0) {
-                this_eye_h = eye_h - 8;   /* left eye smaller */
-            } else {
-                this_eye_h = eye_h + 4;   /* right eye bigger */
+        if (g.expr == EYE_EXPR_WONDER)
+        {
+            if (i == 0)
+            {
+                this_eye_h = eye_h - 8; /* left eye smaller */
+            }
+            else
+            {
+                this_eye_h = eye_h + 4; /* right eye bigger */
             }
 
-            if (this_eye_h < 6) {
+            if (this_eye_h < 6)
+            {
                 this_eye_h = 6;
             }
         }
 
         int this_eye_r = eye_r;
-        if (this_eye_r > this_eye_h / 2) {
+        if (this_eye_r > this_eye_h / 2)
+        {
             this_eye_r = this_eye_h / 2;
         }
 
@@ -508,7 +537,8 @@ static void render_frame(void)
         }
 
         /* --- CUTE: kawaii smiling eyes --- */
-        if (g.expr == EYE_EXPR_CUTE && h_scale > 0.1f) {
+        if (g.expr == EYE_EXPR_CUTE && h_scale > 0.1f)
+        {
 
             /*
              * Make the eye like a smiling crescent.
@@ -518,29 +548,27 @@ static void render_frame(void)
             int cut_y = ey;
             int cut_h = this_eye_h / 2 + 4;
 
-            draw_rect(
-                ex + 4,
-                cut_y,
-                EYE_W - 8,
-                cut_h,
-                black
-            );
+            draw_rect(ex + 4, cut_y, EYE_W - 8, cut_h, black);
 
             /*
              * Add small outside cheek pixels.
              * Use WHITE because background is black.
              */
-            if (i == 0) {
+            if (i == 0)
+            {
                 draw_dot(ex - 3, cy + 5, 2, white);
                 draw_dot(ex - 6, cy + 7, 2, white);
-            } else {
+            }
+            else
+            {
                 draw_dot(ex + EYE_W + 1, cy + 5, 2, white);
                 draw_dot(ex + EYE_W + 4, cy + 7, 2, white);
             }
         }
 
         /* --- SUSPICIOUS: unimpressed side-eye --- */
-        if (g.expr == EYE_EXPR_SUSPICIOUS && h_scale > 0.1f) {
+        if (g.expr == EYE_EXPR_SUSPICIOUS && h_scale > 0.1f)
+        {
 
             /*
              * Narrow the eyes by cutting top and bottom.
@@ -553,41 +581,34 @@ static void render_frame(void)
              * Both pupils look to the same side.
              */
             int pupil_size = 5;
-            int px = cx - 9;   /* look left */
+            int px = cx - 9; /* look left */
             int py = ey + this_eye_h / 2;
 
-            draw_dot(
-                px - pupil_size / 2,
-                py - pupil_size / 2,
-                pupil_size,
-                black
-            );
+            draw_dot(px - pupil_size / 2, py - pupil_size / 2, pupil_size, black);
         }
 
-        /* --- SAD: drooping outer upper corners --- */       
-        if (g.expr == EYE_EXPR_SAD && h_scale > 0.1f) {
+        /* --- SAD: drooping outer upper corners --- */
+        if (g.expr == EYE_EXPR_SAD && h_scale > 0.1f)
+        {
             int cut_w = EYE_W / 2;
             int cut_h = this_eye_h / 2;
 
-            if (i == 0) {
+            if (i == 0)
+            {
                 /* Left eye: cut top-left outer corner */
-                draw_triangle(
-                    ex,           ey,
-                    ex + cut_w,   ey,
-                    ex,           ey + cut_h,
-                    black);
-            } else {
+                draw_triangle(ex, ey, ex + cut_w, ey, ex, ey + cut_h, black);
+            }
+            else
+            {
                 /* Right eye: cut top-right outer corner */
                 draw_triangle(
-                    ex + EYE_W - cut_w, ey,
-                    ex + EYE_W,         ey,
-                    ex + EYE_W,         ey + cut_h,
-                    black);
+                    ex + EYE_W - cut_w, ey, ex + EYE_W, ey, ex + EYE_W, ey + cut_h, black);
             }
         }
 
         /* --- WONDER: confused / curious eyes --- */
-        if (g.expr == EYE_EXPR_WONDER && h_scale > 0.1f) {
+        if (g.expr == EYE_EXPR_WONDER && h_scale > 0.1f)
+        {
 
             /*
              * Pupils look upward-left.
@@ -597,18 +618,14 @@ static void render_frame(void)
             int px = cx - 6;
             int py = ey + 7;
 
-            draw_dot(
-                px - pupil_size / 2,
-                py - pupil_size / 2,
-                pupil_size,
-                black
-            );
+            draw_dot(px - pupil_size / 2, py - pupil_size / 2, pupil_size, black);
 
             /*
              * Add a tiny "thinking" dot near the bigger eye.
              * Only draw it on the right eye.
              */
-            if (i == 1) {
+            if (i == 1)
+            {
                 draw_dot(ex + EYE_W + 4, ey + 2, 2, white);
                 draw_dot(ex + EYE_W + 7, ey - 2, 2, white);
             }
@@ -620,20 +637,16 @@ static void render_frame(void)
             int cut_w = EYE_W / 2 + 4;
             int cut_h = this_eye_h;
 
-            if (i == 0) {
+            if (i == 0)
+            {
                 /* Left eye inner slash */
                 draw_triangle(
-                    ex + EYE_W - cut_w, ey,
-                    ex + EYE_W,         ey,
-                    ex + EYE_W,         ey + cut_h,
-                    black);
-            } else {
+                    ex + EYE_W - cut_w, ey, ex + EYE_W, ey, ex + EYE_W, ey + cut_h, black);
+            }
+            else
+            {
                 /* Right eye inner slash */
-                draw_triangle(
-                    ex,         ey,
-                    ex + cut_w, ey,
-                    ex,         ey + cut_h,
-                    black);
+                draw_triangle(ex, ey, ex + cut_w, ey, ex, ey + cut_h, black);
             }
         }
     }
@@ -737,6 +750,45 @@ static void idle_tick(void)
     }
 }
 
+static void combo_tick(void)
+{
+    if (!g.combo_active) {
+        return;
+    }
+
+    uint32_t t = now_ms();
+
+    if (g.combo_next_ms != 0 && t < g.combo_next_ms) {
+        return;
+    }
+
+    if (g.combo_index >= EYE_COMBO_COUNT) {
+        g.combo_active = false;
+        g.combo_index = 0;
+        g.combo_next_ms = 0;
+
+        g.expr = EYE_EXPR_NORMAL;
+
+        if (g.combo_restore_idle) {
+            eye_anim_set_idle(true);
+        }
+
+        ESP_LOGI(TAG, "eye combo finished");
+        return;
+    }
+
+    const eye_combo_step_t *step = &s_combo[g.combo_index];
+
+    g.expr = step->expr;
+
+    if (step->blink) {
+        eye_anim_blink();
+    }
+
+    g.combo_next_ms = t + step->hold_ms;
+    g.combo_index++;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -761,7 +813,11 @@ void eye_anim_init(lv_obj_t *parent)
 
 void eye_anim_tick(void)
 {
-    idle_tick();
+    if (!g.combo_active) {
+        idle_tick();
+    }
+
+    combo_tick();
     blink_tick();
     look_tick();
     render_frame();
@@ -830,40 +886,63 @@ static void eye_test_all_task(void *arg)
 {
     (void)arg;
 
-    typedef struct {
+    typedef struct
+    {
         eye_expression_t expr;
         const char *name;
     } eye_test_item_t;
 
     static const eye_test_item_t tests[] = {
-        { EYE_EXPR_NORMAL,     "NORMAL" },
-        { EYE_EXPR_HAPPY,      "HAPPY" },
-        { EYE_EXPR_ANGRY,      "ANGRY" },
-        { EYE_EXPR_SLEEPY,     "SLEEPY" },
-        { EYE_EXPR_SURPRISED,  "SURPRISED" },
-        { EYE_EXPR_WONDER,     "WONDER" },
-        { EYE_EXPR_CUTE,       "CUTE" },
-        { EYE_EXPR_SUSPICIOUS, "SUSPICIOUS" },
-        { EYE_EXPR_SAD,        "SAD" },
-        { EYE_EXPR_CLOSE,      "CLOSE" },
-        { EYE_EXPR_UPSET,      "UPSET" },
-        { EYE_EXPR_LOVE,       "LOVE" },
+        {EYE_EXPR_NORMAL, "NORMAL"},
+        {EYE_EXPR_HAPPY, "HAPPY"},
+        {EYE_EXPR_ANGRY, "ANGRY"},
+        {EYE_EXPR_SLEEPY, "SLEEPY"},
+        {EYE_EXPR_SURPRISED, "SURPRISED"},
+        {EYE_EXPR_WONDER, "WONDER"},
+        {EYE_EXPR_CUTE, "CUTE"},
+        {EYE_EXPR_SUSPICIOUS, "SUSPICIOUS"},
+        {EYE_EXPR_SAD, "SAD"},
+        {EYE_EXPR_CLOSE, "CLOSE"},
+        {EYE_EXPR_UPSET, "UPSET"},
+        {EYE_EXPR_LOVE, "LOVE"},
     };
 
     eye_anim_set_idle(false);
 
-    while (1) {
+    while (1)
+    {
         const int count = sizeof(tests) / sizeof(tests[0]);
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < count; i++)
+        {
             ESP_LOGI("EYE_TEST", "Testing eye: %s", tests[i].name);
 
             eye_anim_set_expression(tests[i].expr);
 
-            if (tests[i].expr != EYE_EXPR_CLOSE) {
+            if (tests[i].expr != EYE_EXPR_CLOSE)
+            {
                 eye_anim_blink();
             }
 
             vTaskDelay(pdMS_TO_TICKS(2500));
         }
     }
+}
+
+void eye_anim_play_combo(void)
+{
+    if (g.combo_active) {
+        return;
+    }
+
+    g.combo_active = true;
+    g.combo_index = 0;
+    g.combo_next_ms = 0;
+
+    /* remember current idle state */
+    g.combo_restore_idle = g.idle_enabled;
+
+    /* stop idle random expressions during combo */
+    g.idle_enabled = false;
+
+    ESP_LOGI(TAG, "eye combo started");
 }

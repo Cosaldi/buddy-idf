@@ -59,6 +59,8 @@ void eye_anim_set_expression(eye_expression_t expr);
 /** @brief  Start / stop the automatic idle behaviour (random blinks + looks). */
 void eye_anim_set_idle(bool enable);
 
+void eye_anim_play_combo(void);
+
 #ifdef __cplusplus
 }
 #endif
