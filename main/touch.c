@@ -71,7 +71,8 @@ static void button_task(void *arg)
         if (xQueueReceive(s_evt_queue, &ev, pdMS_TO_TICKS(20)))
         {
             /* Debounce */
-            if ((ev.tick - last_tick) < debounce) {
+            if ((ev.tick - last_tick) < debounce)
+            {
                 continue;
             }
             last_tick = ev.tick;
@@ -103,7 +104,8 @@ static void button_task(void *arg)
                  * If long press already fired while holding,
                  * do not also trigger short press on release.
                  */
-                if (long_fired) {
+                if (long_fired)
+                {
                     long_fired = false;
                     continue;
                 }
@@ -139,8 +141,8 @@ static void button_task(void *arg)
 
                 if (display_get_screen() == SCREEN_FACE)
                 {
-                    ESP_LOGI(TAG, "Long press on face -> expression combo");
-                    eye_anim_play_combo();
+                    ESP_LOGI(TAG, "Long press on face -> random expression combo");
+                    eye_anim_play_random_combo();
                 }
                 else if (display_get_screen() == SCREEN_CLOCK)
                 {
