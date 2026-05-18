@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -32,18 +33,33 @@ static const char *TAG = "weather";
 
 /* ── Internal state ──────────────────────────────────────────────────── */
 static weather_data_t s_data = {0};
+static weather_forecast_item_t s_forecast[WEATHER_FORECAST_MAX] = {0};
+static int s_forecast_count = 0;
 
 /* HTTP response accumulation buffer */
-#define HTTP_BUF_SIZE 2048
+#define HTTP_BUF_SIZE 8192
 static char s_http_buf[HTTP_BUF_SIZE];
 static int s_http_len = 0;
 
 /* ── Build API URL ───────────────────────────────────────────────────── */
-static void build_url(char *buf, size_t len)
+static void build_current_url(char *buf, size_t len)
 {
     snprintf(buf,
              len,
              "http://api.openweathermap.org/data/2.5/weather"
+             "?q=%s,%s&units=%s&lang=%s&appid=%s",
+             WEATHER_CITY,
+             WEATHER_COUNTRY_CODE,
+             WEATHER_UNITS,
+             WEATHER_LANG,
+             WEATHER_API_KEY);
+}
+
+static void build_forecast_url(char *buf, size_t len)
+{
+    snprintf(buf,
+             len,
+             "http://api.openweathermap.org/data/2.5/forecast"
              "?q=%s,%s&units=%s&lang=%s&appid=%s",
              WEATHER_CITY,
              WEATHER_COUNTRY_CODE,
@@ -171,66 +187,174 @@ static bool parse_weather(const char *json, weather_data_t *out)
     return ok;
 }
 
-/* ── Fetch one weather update ────────────────────────────────────────── */
-static void fetch_weather(void)
+static bool json_get_float_from_object(const char *obj, const char *key, float *out)
 {
-    if (!wifi_manager_is_connected())
-    {
-        ESP_LOGW(TAG, "%s", "WiFi not connected, skipping fetch");
-        return;
+    return json_get_float(obj, key, out);
+}
+
+static bool parse_forecast(const char *json)
+{
+    if (!json || strlen(json) < 10) {
+        ESP_LOGE(TAG, "%s", "Empty forecast JSON");
+        return false;
     }
 
-    char url[256];
-    build_url(url, sizeof(url));
+    memset(s_forecast, 0, sizeof(s_forecast));
+    s_forecast_count = 0;
+
+    time_t now = time(NULL);
+
+    const char *p = json;
+
+    while (s_forecast_count < WEATHER_FORECAST_MAX) {
+        const char *dt_pos = strstr(p, "\"dt\":");
+        if (!dt_pos) {
+            break;
+        }
+
+        time_t ts = (time_t)strtol(dt_pos + 5, NULL, 10);
+
+        /*
+         * Only use future forecast slots.
+         * +60 avoids showing a slot that is basically already passed.
+         */
+        if (ts <= now + 60) {
+            p = dt_pos + 5;
+            continue;
+        }
+
+        const char *next_dt = strstr(dt_pos + 5, "\"dt\":");
+
+        char condition[32] = "N/A";
+        float temp_c = 0.0f;
+
+        json_get_float_from_object(dt_pos, "temp", &temp_c);
+        json_get_string(dt_pos, "main", condition, sizeof(condition));
+
+        weather_forecast_item_t *item = &s_forecast[s_forecast_count];
+
+        item->timestamp = ts;
+        item->temp_c = temp_c;
+        item->valid = true;
+
+        strncpy(item->condition, condition, sizeof(item->condition) - 1);
+        item->condition[sizeof(item->condition) - 1] = '\0';
+
+        struct tm tm_local;
+        localtime_r(&ts, &tm_local);
+        snprintf(item->time, sizeof(item->time), "%02d:%02d",
+                 tm_local.tm_hour,
+                 tm_local.tm_min);
+
+        ESP_LOGI(TAG,
+                 "Forecast[%d]: %s %.1f C %s",
+                 s_forecast_count,
+                 item->time,
+                 item->temp_c,
+                 item->condition);
+
+        s_forecast_count++;
+
+        if (!next_dt) {
+            break;
+        }
+
+        p = next_dt;
+    }
+
+    return s_forecast_count > 0;
+}
+
+/* ── Fetch one weather update ────────────────────────────────────────── */
+static bool http_get_url(const char *url)
+{
+    s_http_len = 0;
+    memset(s_http_buf, 0, sizeof(s_http_buf));
 
     esp_http_client_config_t cfg = {
         .url = url,
         .event_handler = http_event_handler,
         .timeout_ms = 10000,
-        .buffer_size = 512,
+        .buffer_size = 1024,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
-    if (!client)
-    {
+    if (!client) {
         ESP_LOGE(TAG, "%s", "HTTP client init failed");
-        return;
+        return false;
     }
 
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
 
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "HTTP request failed: %d — check WiFi/DNS", err);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HTTP request failed: %d", err);
+        return false;
+    }
+
+    if (status != 200) {
+        ESP_LOGW(TAG, "OWM returned HTTP %d - response: %s", status, s_http_buf);
+        return false;
+    }
+
+    return true;
+}
+
+static void fetch_weather(void)
+{
+    if (!wifi_manager_is_connected()) {
+        ESP_LOGW(TAG, "%s", "WiFi not connected, skipping fetch");
         return;
     }
-    if (status != 200)
-    {
-        ESP_LOGW(TAG, "OWM returned HTTP %d — response: %s", status, s_http_buf);
-        return;
+
+    /* ------------------------------------------------------------------ */
+    /* Current weather                                                     */
+    /* ------------------------------------------------------------------ */
+
+    char url[256];
+    build_current_url(url, sizeof(url));
+
+    if (http_get_url(url)) {
+        ESP_LOGI(TAG, "Current response (%d bytes): %.80s...", s_http_len, s_http_buf);
+
+        weather_data_t fresh = {0};
+
+        if (parse_weather(s_http_buf, &fresh)) {
+            s_data = fresh;
+
+            ESP_LOGI(TAG,
+                     "Weather: %s %.1f C (feels %.1f C) hum %d%%",
+                     s_data.condition,
+                     s_data.temp_c,
+                     s_data.feels_like_c,
+                     s_data.humidity);
+
+            display_update_weather(s_data.condition, s_data.temp_c);
+        } else {
+            ESP_LOGW(TAG, "%s", "Failed to parse current weather JSON");
+        }
     }
 
-    ESP_LOGI(TAG, "Response (%d bytes): %.80s...", s_http_len, s_http_buf);
+    /* ------------------------------------------------------------------ */
+    /* Forecast weather                                                    */
+    /* ------------------------------------------------------------------ */
 
-    weather_data_t fresh = {0};
-    if (parse_weather(s_http_buf, &fresh))
-    {
-        s_data = fresh;
-        ESP_LOGI(TAG,
-                 "Weather: %s %.1f C (feels %.1f C) hum %d%%",
-                 s_data.condition,
-                 s_data.temp_c,
-                 s_data.feels_like_c,
-                 s_data.humidity);
+    build_forecast_url(url, sizeof(url));
 
-        /* Push to display. display_update_weather() handles LVGL locking. */
-        display_update_weather(s_data.condition, s_data.temp_c);
-    }
-    else
-    {
-        ESP_LOGW(TAG, "%s", "Failed to parse weather JSON");
+    if (http_get_url(url)) {
+        ESP_LOGI(TAG, "Forecast response (%d bytes): %.80s...", s_http_len, s_http_buf);
+
+        if (parse_forecast(s_http_buf)) {
+            ESP_LOGI(TAG, "Forecast parsed: %d slots", s_forecast_count);
+
+            /*
+             * If forecast screen is currently visible, display.c can refresh
+             * it when user toggles or when current weather updates.
+             */
+        } else {
+            ESP_LOGW(TAG, "%s", "Failed to parse forecast JSON");
+        }
     }
 }
 
@@ -264,5 +388,28 @@ bool weather_get(weather_data_t *out)
     if (!out || !s_data.valid)
         return false;
     *out = s_data;
+    return true;
+}
+
+int weather_get_forecast_count(void)
+{
+    return s_forecast_count;
+}
+
+bool weather_get_forecast(int index, weather_forecast_item_t *out)
+{
+    if (!out) {
+        return false;
+    }
+
+    if (index < 0 || index >= s_forecast_count) {
+        return false;
+    }
+
+    if (!s_forecast[index].valid) {
+        return false;
+    }
+
+    *out = s_forecast[index];
     return true;
 }

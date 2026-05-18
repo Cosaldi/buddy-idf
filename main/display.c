@@ -29,6 +29,7 @@
 #include "ntp_sync.h"
 #include "display.h"
 #include "eye_anim.h"
+#include "weather.h"
 
 #include "sdkconfig.h"
 
@@ -51,8 +52,12 @@ static lv_obj_t *s_lbl_time = NULL;
 static lv_obj_t *s_lbl_date = NULL;
 
 /* --- Weather widgets --- */
+static lv_obj_t *s_lbl_weather_title = NULL;
 static lv_obj_t *s_lbl_weather_cond = NULL;
 static lv_obj_t *s_lbl_weather_temp = NULL;
+static lv_obj_t *s_lbl_forecast[WEATHER_FORECAST_MAX] = {0};
+
+static bool s_weather_forecast_mode = false;
 
 /* --- Eye expression cycling --- */
 static const eye_expression_t EYE_EXPRESSIONS[] = {
@@ -286,20 +291,33 @@ static void build_screen_clock(lv_obj_t *parent)
 
 static void build_screen_weather(lv_obj_t *parent)
 {
-    lv_obj_t *lbl_hdr = lv_label_create(parent);
-    lv_label_set_text(lbl_hdr, "Weather");
-    lv_obj_set_style_text_color(lbl_hdr, lv_color_white(), 0);
-    lv_obj_align(lbl_hdr, LV_ALIGN_TOP_MID, 0, 4);
+    s_lbl_weather_title = lv_label_create(parent);
+    lv_label_set_text(s_lbl_weather_title, "Weather");
+    lv_obj_set_style_text_color(s_lbl_weather_title, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_weather_title, &lv_font_montserrat_10, 0);
+    lv_obj_align(s_lbl_weather_title, LV_ALIGN_TOP_MID, 0, 2);
 
     s_lbl_weather_cond = lv_label_create(parent);
     lv_label_set_text(s_lbl_weather_cond, "---");
     lv_obj_set_style_text_color(s_lbl_weather_cond, lv_color_white(), 0);
-    lv_obj_align(s_lbl_weather_cond, LV_ALIGN_CENTER, 0, -6);
+    lv_obj_set_style_text_font(s_lbl_weather_cond, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_lbl_weather_cond, LV_ALIGN_CENTER, 0, -8);
 
     s_lbl_weather_temp = lv_label_create(parent);
     lv_label_set_text(s_lbl_weather_temp, "--.-C");
     lv_obj_set_style_text_color(s_lbl_weather_temp, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_weather_temp, &lv_font_montserrat_14, 0);
     lv_obj_align(s_lbl_weather_temp, LV_ALIGN_CENTER, 0, 14);
+
+    for (int i = 0; i < WEATHER_FORECAST_MAX; i++)
+    {
+        s_lbl_forecast[i] = lv_label_create(parent);
+        lv_label_set_text(s_lbl_forecast[i], "--:-- --.-C ---");
+        lv_obj_set_style_text_color(s_lbl_forecast[i], lv_color_white(), 0);
+        lv_obj_set_style_text_font(s_lbl_forecast[i], &lv_font_montserrat_10, 0);
+        lv_obj_align(s_lbl_forecast[i], LV_ALIGN_TOP_LEFT, 4, 18 + (i * 14));
+        lv_obj_add_flag(s_lbl_forecast[i], LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -391,6 +409,127 @@ void display_face_next_expression(void)
 }
 
 /* -------------------------------------------------------------------------- */
+/* Weather display mode                                                       */
+/* -------------------------------------------------------------------------- */
+
+static void display_set_weather_mode_locked(bool forecast_mode)
+{
+    s_weather_forecast_mode = forecast_mode;
+
+    /*
+     * Current weather labels are visible only in normal weather mode.
+     */
+    if (s_lbl_weather_cond)
+    {
+        if (forecast_mode)
+        {
+            lv_obj_add_flag(s_lbl_weather_cond, LV_OBJ_FLAG_HIDDEN);
+        }
+        else
+        {
+            lv_obj_clear_flag(s_lbl_weather_cond, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    if (s_lbl_weather_temp)
+    {
+        if (forecast_mode)
+        {
+            lv_obj_add_flag(s_lbl_weather_temp, LV_OBJ_FLAG_HIDDEN);
+        }
+        else
+        {
+            lv_obj_clear_flag(s_lbl_weather_temp, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    /*
+     * Forecast rows are visible only in forecast mode.
+     */
+    for (int i = 0; i < WEATHER_FORECAST_MAX; i++)
+    {
+        if (!s_lbl_forecast[i])
+        {
+            continue;
+        }
+
+        if (forecast_mode)
+        {
+            lv_obj_clear_flag(s_lbl_forecast[i], LV_OBJ_FLAG_HIDDEN);
+        }
+        else
+        {
+            lv_obj_add_flag(s_lbl_forecast[i], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+static void display_update_weather_forecast_locked(void)
+{
+    int count = weather_get_forecast_count();
+
+    for (int i = 0; i < WEATHER_FORECAST_MAX; i++)
+    {
+        if (!s_lbl_forecast[i])
+        {
+            continue;
+        }
+
+        weather_forecast_item_t item;
+
+        if (i < count && weather_get_forecast(i, &item))
+        {
+            char row[32];
+
+            /*
+             * Example:
+             * 21:00 25.8C Rain
+             */
+            snprintf(row, sizeof(row), "%s %.0fC %.8s", item.time, item.temp_c, item.condition);
+
+            lv_label_set_text(s_lbl_forecast[i], row);
+        }
+        else
+        {
+            lv_label_set_text(s_lbl_forecast[i], "--:-- --.-C ---");
+        }
+    }
+}
+
+void display_weather_toggle_forecast(void)
+{
+    lvgl_port_lock(0);
+
+    if (!s_weather_forecast_mode)
+    {
+        /*
+         * Switch from current weather mode to forecast mode.
+         */
+        if (s_lbl_weather_title)
+        {
+            lv_label_set_text(s_lbl_weather_title, "Forecast");
+        }
+
+        display_update_weather_forecast_locked();
+        display_set_weather_mode_locked(true);
+    }
+    else
+    {
+        /*
+         * Switch back to current weather mode.
+         */
+        if (s_lbl_weather_title)
+        {
+            lv_label_set_text(s_lbl_weather_title, "Weather");
+        }
+
+        display_set_weather_mode_locked(false);
+    }
+
+    lvgl_port_unlock();
+}
+
+/* -------------------------------------------------------------------------- */
 /* Weather update                                                             */
 /* -------------------------------------------------------------------------- */
 
@@ -406,6 +545,9 @@ void display_update_weather(const char *condition, float temp_c)
 
     lvgl_port_lock(0);
 
+    /*
+     * Update normal weather labels.
+     */
     if (s_lbl_weather_cond)
     {
         lv_label_set_text(s_lbl_weather_cond, condition);
@@ -414,6 +556,15 @@ void display_update_weather(const char *condition, float temp_c)
     if (s_lbl_weather_temp)
     {
         lv_label_set_text(s_lbl_weather_temp, temp_str);
+    }
+
+    /*
+     * If the forecast view is open, refresh its rows too.
+     * This uses cached forecast data, not a new API request.
+     */
+    if (s_weather_forecast_mode)
+    {
+        display_update_weather_forecast_locked();
     }
 
     lvgl_port_unlock();

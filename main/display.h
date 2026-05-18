@@ -56,6 +56,8 @@ void display_face_next_expression(void);
 /** @brief Update weather data. Safe to call from any task. */
 void display_update_weather(const char *condition, float temp_c);
 
+void display_weather_toggle_forecast(void);
+
 /** @brief Tick -- only needed if NOT using esp_lvgl_port auto-tick. */
 void display_tick(void);
 

@@ -1,13 +1,14 @@
 /*
- * DeskBuddy — touch.c
+ * Buddy - touch.c
  *
- * Short press              -> display_next_screen()
- * Long press on SCREEN_FACE -> play eye expression combo
- * Long press on SCREEN_CLOCK -> WiFi setup portal
- * Long press on SCREEN_WIFI  -> stop portal and return to clock
+ * Short press                  -> display_next_screen()
+ * Long press on SCREEN_FACE    -> play random eye combo reaction
+ * Long press on SCREEN_WEATHER -> toggle current weather / forecast view
+ * Long press on SCREEN_CLOCK   -> WiFi setup portal
+ * Long press on SCREEN_WIFI    -> stop portal and return to clock
  *
  * Uses ANYEDGE: falling = press start, rising = press end.
- * Hold duration measured in button task — ISR is minimal.
+ * Hold duration is measured in button task. ISR stays minimal.
  */
 
 #include <stdbool.h>
@@ -143,6 +144,11 @@ static void button_task(void *arg)
                 {
                     ESP_LOGI(TAG, "Long press on face -> random expression combo");
                     eye_anim_play_random_combo();
+                }
+                else if (display_get_screen() == SCREEN_WEATHER)
+                {
+                    ESP_LOGI(TAG, "Long press on weather -> toggle forecast");
+                    display_weather_toggle_forecast();
                 }
                 else if (display_get_screen() == SCREEN_CLOCK)
                 {

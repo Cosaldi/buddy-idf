@@ -17,7 +17,7 @@
 #define BUTTON_GPIO          27   // TTP223 pin
 #define BUTTON_ACTIVE_LEVEL   1   // TTP223 is active HIGH
 #define BUTTON_DEBOUNCE_MS    50     /* ignore bounces shorter than this  */
-#define BUTTON_LONG_PRESS_MS  2000   /* hold 2 s → long press             */
+#define BUTTON_LONG_PRESS_MS  1000   /* hold 2 s → long press             */
 
 /**
  * @brief Configure GPIO and install ISR. Starts internal debounce task.
