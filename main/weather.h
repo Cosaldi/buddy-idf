@@ -20,6 +20,8 @@
 /* Config                                                                     */
 /* -------------------------------------------------------------------------- */
 
+#include "weather_private.h"
+
 #ifndef WEATHER_API_KEY
 #define WEATHER_API_KEY ""
 #endif
