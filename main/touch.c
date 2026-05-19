@@ -122,6 +122,19 @@ static void button_task(void *arg)
                         continue;
                     }
 
+                    if (display_get_screen() == SCREEN_SPLASH)
+                    {
+                        ESP_LOGI(TAG, "Short press ignored on splash screen");
+                        continue;
+                    }
+
+                    if (display_get_screen() == SCREEN_BIRTHDAY)
+                    {
+                        ESP_LOGI(TAG, "Short press on birthday -> face");
+                        display_set_screen(SCREEN_FACE);
+                        continue;
+                    }
+
                     display_next_screen();
                 }
             }
@@ -140,7 +153,17 @@ static void button_task(void *arg)
                 long_fired = true;
                 display_reset_activity();
 
-                if (display_get_screen() == SCREEN_FACE)
+                if (display_get_screen() == SCREEN_SPLASH)
+                {
+                    ESP_LOGI(TAG, "Long press on splash -> birthday screen");
+                    display_show_birthday();
+                }
+                else if (display_get_screen() == SCREEN_BIRTHDAY)
+                {
+                    ESP_LOGI(TAG, "Long press on birthday -> face");
+                    display_set_screen(SCREEN_FACE);
+                }
+                else if (display_get_screen() == SCREEN_FACE)
                 {
                     ESP_LOGI(TAG, "Long press on face -> random expression combo");
                     eye_anim_play_random_combo();

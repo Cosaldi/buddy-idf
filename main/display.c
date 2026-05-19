@@ -39,12 +39,16 @@
 
 static const char *TAG = "display";
 
+#define SPLASH_DURATION_MS 5000
+
+static lv_timer_t *s_splash_timer = NULL;
+
 /* --- Handles --- */
 static esp_lcd_panel_handle_t s_panel = NULL;
 static lv_disp_t *s_disp = NULL;
 
 /* --- Screen state --- */
-static display_screen_t s_current_screen = SCREEN_FACE;
+static display_screen_t s_current_screen = SCREEN_SPLASH;
 static lv_obj_t *s_screens[SCREEN_COUNT];
 
 /* --- Clock widgets --- */
@@ -78,8 +82,11 @@ static void build_screen_face(lv_obj_t *parent);
 static void build_screen_clock(lv_obj_t *parent);
 static void build_screen_weather(lv_obj_t *parent);
 static void build_screen_wifi(lv_obj_t *parent);
+static void build_screen_splash(lv_obj_t *parent);
+static void build_screen_birthday(lv_obj_t *parent);
 static void clock_timer_cb(lv_timer_t *timer);
 static void eye_timer_cb(lv_timer_t *timer);
+static void splash_timer_cb(lv_timer_t *timer);
 
 static bool s_display_on = true;
 static uint32_t s_last_activity_ms = 0;
@@ -213,12 +220,17 @@ void display_init(void)
         lv_obj_set_style_bg_opa(s_screens[i], LV_OPA_COVER, 0);
     }
 
+    build_screen_splash(s_screens[SCREEN_SPLASH]);
     build_screen_face(s_screens[SCREEN_FACE]);
     build_screen_clock(s_screens[SCREEN_CLOCK]);
     build_screen_weather(s_screens[SCREEN_WEATHER]);
     build_screen_wifi(s_screens[SCREEN_WIFI]);
+    build_screen_birthday(s_screens[SCREEN_BIRTHDAY]);
 
-    lv_disp_load_scr(s_screens[SCREEN_FACE]);
+    lv_disp_load_scr(s_screens[SCREEN_SPLASH]);
+
+    s_splash_timer = lv_timer_create(splash_timer_cb, SPLASH_DURATION_MS, NULL);
+    lv_timer_set_repeat_count(s_splash_timer, 1);
 
     lv_timer_create(clock_timer_cb, 1000, NULL);
 
@@ -233,6 +245,42 @@ void display_init(void)
 /* -------------------------------------------------------------------------- */
 /* Screen builders                                                            */
 /* -------------------------------------------------------------------------- */
+
+static void build_screen_splash(lv_obj_t *parent)
+{
+    lv_obj_t *title = lv_label_create(parent);
+    lv_label_set_text(title, "Buddy");
+    lv_obj_set_style_text_color(title, lv_color_white(), 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
+    lv_obj_align(title, LV_ALIGN_CENTER, 0, -12);
+
+    lv_obj_t *sub = lv_label_create(parent);
+    lv_label_set_text(sub, "for someone special");
+    lv_obj_set_style_text_color(sub, lv_color_white(), 0);
+    lv_obj_set_style_text_font(sub, &lv_font_montserrat_10, 0);
+    lv_obj_align(sub, LV_ALIGN_CENTER, 0, 12);
+}
+
+static void build_screen_birthday(lv_obj_t *parent)
+{
+    lv_obj_t *line1 = lv_label_create(parent);
+    lv_label_set_text(line1, "Happy Birthday!");
+    lv_obj_set_style_text_color(line1, lv_color_white(), 0);
+    lv_obj_set_style_text_font(line1, &lv_font_montserrat_14, 0);
+    lv_obj_align(line1, LV_ALIGN_CENTER, 0, -20);
+
+    lv_obj_t *line2 = lv_label_create(parent);
+    lv_label_set_text(line2, "Made just");
+    lv_obj_set_style_text_color(line2, lv_color_white(), 0);
+    lv_obj_set_style_text_font(line2, &lv_font_montserrat_10, 0);
+    lv_obj_align(line2, LV_ALIGN_CENTER, 0, 6);
+
+    lv_obj_t *line3 = lv_label_create(parent);
+    lv_label_set_text(line3, "for you <3");
+    lv_obj_set_style_text_color(line3, lv_color_white(), 0);
+    lv_obj_set_style_text_font(line3, &lv_font_montserrat_10, 0);
+    lv_obj_align(line3, LV_ALIGN_CENTER, 0, 22);
+}
 
 static void build_screen_face(lv_obj_t *parent)
 {
@@ -352,8 +400,25 @@ void display_next_screen(void)
 {
     s_last_activity_ms = esp_timer_get_time() / 1000; /* reset idle timer */
     display_screen_t prev = s_current_screen;
-    s_current_screen = (display_screen_t)((s_current_screen + 1) %
-                                          SCREEN_WIFI); /* skip SCREEN_WIFI from normal cycle */
+
+    switch (s_current_screen)
+    {
+    case SCREEN_FACE:
+        s_current_screen = SCREEN_CLOCK;
+        break;
+    case SCREEN_CLOCK:
+        s_current_screen = SCREEN_WEATHER;
+        break;
+    case SCREEN_WEATHER:
+        s_current_screen = SCREEN_FACE;
+        break;
+    case SCREEN_SPLASH:
+    case SCREEN_BIRTHDAY:
+    case SCREEN_WIFI:
+    default:
+        s_current_screen = SCREEN_FACE;
+        break;
+    }
 
     if (prev == SCREEN_FACE && s_current_screen != SCREEN_FACE)
         eye_anim_set_idle(false);
@@ -652,5 +717,58 @@ static void eye_test_all_task(void *arg)
 
             vTaskDelay(pdMS_TO_TICKS(2500));
         }
+    }
+}
+
+void display_show_splash(void)
+{
+    eye_anim_set_idle(false);
+
+    lvgl_port_lock(0);
+    s_current_screen = SCREEN_SPLASH;
+    lv_disp_load_scr(s_screens[SCREEN_SPLASH]);
+    lvgl_port_unlock();
+
+    ESP_LOGI(TAG, "%s", "Splash screen shown");
+}
+
+void display_show_birthday(void)
+{
+    if (s_splash_timer) {
+        lv_timer_del(s_splash_timer);
+        s_splash_timer = NULL;
+    }
+
+    eye_anim_set_idle(false);
+
+    lvgl_port_lock(0);
+    s_current_screen = SCREEN_BIRTHDAY;
+    lv_disp_load_scr(s_screens[SCREEN_BIRTHDAY]);
+    lvgl_port_unlock();
+
+    ESP_LOGI(TAG, "%s", "Birthday screen shown");
+}
+
+void display_finish_splash(void)
+{
+    if (s_current_screen != SCREEN_SPLASH)
+    {
+        return;
+    }
+
+    display_set_screen(SCREEN_FACE);
+}
+
+static void splash_timer_cb(lv_timer_t *timer)
+{
+    if (s_current_screen == SCREEN_SPLASH)
+    {
+        display_set_screen(SCREEN_FACE);
+    }
+
+    if (s_splash_timer)
+    {
+        lv_timer_del(s_splash_timer);
+        s_splash_timer = NULL;
     }
 }

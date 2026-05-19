@@ -1,6 +1,6 @@
 #pragma once
 /*
- * DeskBuddy — display.h
+ * Buddy — display.h
  * LVGL v8 display driver for SSD1306 128×64 via esp_lcd + esp_lvgl_port.
  *
  * Screens (cycled by button press):
@@ -22,10 +22,12 @@
 
 /* Screen indices */
 typedef enum {
-    SCREEN_FACE    = 0,
-    SCREEN_CLOCK   = 1,
-    SCREEN_WEATHER = 2,
-    SCREEN_WIFI    = 3,
+    SCREEN_SPLASH = 0,
+    SCREEN_FACE,
+    SCREEN_CLOCK,
+    SCREEN_WEATHER,
+    SCREEN_WIFI,
+    SCREEN_BIRTHDAY,
     SCREEN_COUNT
 } display_screen_t;
 
@@ -75,3 +77,7 @@ uint32_t display_get_last_activity_ms(void);
 
 /** @brief Returns true if display is currently suspended. */
 bool display_is_suspended(void);
+
+void display_show_splash(void);
+void display_show_birthday(void);
+void display_finish_splash(void);

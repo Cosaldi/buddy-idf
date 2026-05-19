@@ -1,6 +1,6 @@
 /*
- * DeskBuddy — main.c
- * ESP32-C3 Super Mini | SSD1306 128×64 | TTP223 touch | LVGL v8
+ * Buddy — main.c
+ * ESP32-C3 Super Mini | 128×64 | TTP223 touch | LVGL v8
  */
 
 #include <stdio.h>
@@ -33,7 +33,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(TAG, "%s", "=== DeskBuddy booting ===");
+    ESP_LOGI(TAG, "%s", "=== Buddy booting ===");
 
     /* Init display + LVGL first so splash can show during WiFi connect */
     display_init();
