@@ -80,7 +80,7 @@
 #define LOOK_DY 5
 
 /* More steps = smoother blink.  eye_anim_tick() usually runs every 20 ms. */
-#define BLINK_STEPS 5
+#define BLINK_STEPS 2
 
 /* Idle timing, in milliseconds */
 #define IDLE_BLINK_MIN 2000
@@ -432,43 +432,43 @@ static void draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, lv_col
 #define COMBO_DEF(arr, combo_name) {arr, sizeof(arr) / sizeof((arr)[0]), combo_name}
 
 static const eye_combo_step_t s_combo_cute[] = {
-    {EYE_EXPR_NORMAL, 250, false},
-    {EYE_EXPR_HAPPY, 700, true},
-    {EYE_EXPR_CUTE, 1000, true},
-    {EYE_EXPR_HAPPY, 700, true},
-    {EYE_EXPR_NORMAL, 500, true},
+    { EYE_EXPR_NORMAL, 150, false },
+    { EYE_EXPR_HAPPY,  350, true  },
+    { EYE_EXPR_CUTE,   550, true  },
+    { EYE_EXPR_HAPPY,  350, true  },
+    { EYE_EXPR_NORMAL, 250, true  },
 };
 
 static const eye_combo_step_t s_combo_confused[] = {
-    {EYE_EXPR_NORMAL, 250, false},
-    {EYE_EXPR_WONDER, 1000, true},
-    {EYE_EXPR_SUSPICIOUS, 800, true},
-    {EYE_EXPR_WONDER, 900, true},
-    {EYE_EXPR_NORMAL, 500, true},
+    { EYE_EXPR_NORMAL,     150, false },
+    { EYE_EXPR_WONDER,     600, true  },
+    { EYE_EXPR_SUSPICIOUS, 450, true  },
+    { EYE_EXPR_WONDER,     500, true  },
+    { EYE_EXPR_NORMAL,     250, true  },
 };
 
 static const eye_combo_step_t s_combo_love[] = {
-    {EYE_EXPR_NORMAL, 250, false},
-    {EYE_EXPR_CUTE, 700, true},
-    {EYE_EXPR_LOVE, 1200, true},
-    {EYE_EXPR_HAPPY, 800, true},
-    {EYE_EXPR_NORMAL, 500, true},
+    { EYE_EXPR_NORMAL, 150, false },
+    { EYE_EXPR_CUTE,   350, true  },
+    { EYE_EXPR_LOVE,   700, true  },
+    { EYE_EXPR_HAPPY,  450, true  },
+    { EYE_EXPR_NORMAL, 250, true  },
 };
 
 static const eye_combo_step_t s_combo_sleepy[] = {
-    {EYE_EXPR_NORMAL, 300, false},
-    {EYE_EXPR_SLEEPY, 1000, true},
-    {EYE_EXPR_CLOSE, 900, false},
-    {EYE_EXPR_SLEEPY, 800, true},
-    {EYE_EXPR_NORMAL, 600, true},
+    { EYE_EXPR_NORMAL, 200, false },
+    { EYE_EXPR_SLEEPY, 600, true  },
+    { EYE_EXPR_CLOSE,  500, false },
+    { EYE_EXPR_SLEEPY, 450, true  },
+    { EYE_EXPR_NORMAL, 300, true  },
 };
 
 static const eye_combo_step_t s_combo_grumpy[] = {
-    {EYE_EXPR_NORMAL, 250, false},
-    {EYE_EXPR_SUSPICIOUS, 900, true},
-    {EYE_EXPR_ANGRY, 800, true},
-    {EYE_EXPR_UPSET, 1000, true},
-    {EYE_EXPR_NORMAL, 600, true},
+    { EYE_EXPR_NORMAL,     150, false },
+    { EYE_EXPR_SUSPICIOUS, 500, true  },
+    { EYE_EXPR_ANGRY,      450, true  },
+    { EYE_EXPR_UPSET,      600, true  },
+    { EYE_EXPR_NORMAL,     300, true  },
 };
 
 static const eye_combo_def_t s_combos[] = {
