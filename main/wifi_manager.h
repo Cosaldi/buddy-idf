@@ -39,8 +39,9 @@
  * Behavior:
  * - If saved credentials exist, tries them one by one.
  * - If one network connects successfully, Wi-Fi stays connected.
- * - If no credentials exist, starts the softAP setup portal.
+ * - If no credentials exist, Wi-Fi stays off.
  * - If all credentials fail, Wi-Fi is stopped and retried later.
+ * - The softAP setup portal starts only from explicit user action.
  */
 void wifi_manager_init(void);
 
