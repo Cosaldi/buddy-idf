@@ -1,7 +1,8 @@
 /* -------------------------------------------------------------------------- */
 /* Buddy - wifi_manager.c                                                     */
 /*                                                                            */
-/* Station connection with saved NVS credentials and softAP portal fallback.  */
+/* Wi-Fi station connection, saved NVS credentials, manual setup portal,      */
+/* and battery-friendly retry handling.                                       */
 /* -------------------------------------------------------------------------- */
 
 #include <stdbool.h>
@@ -25,13 +26,8 @@
 #include "wifi_manager.h"
 
 /* -------------------------------------------------------------------------- */
-/* Static Variables                                                           */
+/* Defines / constants                                                        */
 /* -------------------------------------------------------------------------- */
-
-static esp_netif_t *s_sta_netif = NULL;
-static esp_netif_t *s_ap_netif = NULL;
-
-static const char *TAG = "wifi_manager";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
@@ -39,30 +35,66 @@ static const char *TAG = "wifi_manager";
 #define PORTAL_HTML_MAX 4096
 #define WIFI_RETRY_LATER_MS (60UL * 60UL * 1000UL)
 
+/* -------------------------------------------------------------------------- */
+/* Static variables                                                           */
+/* -------------------------------------------------------------------------- */
+
+static const char *TAG = "wifi_manager";
+
+static esp_netif_t *s_sta_netif = NULL;
+static esp_netif_t *s_ap_netif = NULL;
+
 static EventGroupHandle_t s_wifi_eg = NULL;
+
 static bool s_connected = false;
 static bool s_connecting = false;
 static bool s_portal_running = false;
+
 static int s_retries = 0;
+
 static httpd_handle_t s_httpd = NULL;
+
 static TaskHandle_t s_retry_later_task = NULL;
 static TaskHandle_t s_retry_now_task = NULL;
 
-/* Forward declarations */
+/* -------------------------------------------------------------------------- */
+/* Forward declarations                                                       */
+/* -------------------------------------------------------------------------- */
+
+static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data);
+static bool connect_sta(const char *ssid, const char *pass);
 static void wifi_schedule_retry_now(void);
 static void wifi_schedule_retry_later(void);
+static void start_http_server(void);
 
 /* -------------------------------------------------------------------------- */
-/* WiFi Event Handler                                                         */
+/* Wi-Fi event handler                                                        */
 /* -------------------------------------------------------------------------- */
-
+/*
+ * Handles ESP-IDF Wi-Fi/IP events.
+ *
+ * STA_START:
+ * - start connection attempt
+ *
+ * STA_DISCONNECTED:
+ * - retry current credential up to WIFI_MAX_RETRY
+ * - notify connect_sta() if it is waiting
+ * - schedule retry if connection was lost later
+ *
+ * STA_GOT_IP:
+ * - mark Wi-Fi as connected
+ * - notify connect_sta()
+ */
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
 
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START)
     {
-        esp_wifi_connect();
+        if (!s_portal_running)
+        {
+            esp_wifi_connect();
+        }
     }
     else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED)
     {
@@ -71,6 +103,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         wifi_event_sta_disconnected_t *disc = (wifi_event_sta_disconnected_t *)data;
 
         ESP_LOGW(TAG, "WiFi disconnected, reason=%d", disc ? disc->reason : -1);
+
+        /*
+         * Ignore STA disconnects while the setup portal is active.
+         * Starting SoftAP intentionally stops/changes STA mode, and retrying here
+         * can kill Buddy-Setup.
+         */
+        if (s_portal_running)
+        {
+            ESP_LOGI(TAG, "Portal is running, ignore STA disconnect retry");
+            return;
+        }
 
         if (s_retries < WIFI_MAX_RETRY)
         {
@@ -84,17 +127,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         {
             ESP_LOGW(TAG, "Max retry reached");
 
-            /*
-             * If connect_sta() is currently waiting, only notify it.
-             * It will return false and wifi_manager_init() will try
-             * the next saved credential.
-             *
-             * If WiFi was already connected before and later disconnected,
-             * connect_sta() is no longer running, so schedule a retry task.
-             */
             if (s_connecting)
             {
-                xEventGroupSetBits(s_wifi_eg, WIFI_FAIL_BIT);
+                if (s_wifi_eg)
+                {
+                    xEventGroupSetBits(s_wifi_eg, WIFI_FAIL_BIT);
+                }
             }
             else
             {
@@ -111,14 +149,233 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         s_retries = 0;
         s_connected = true;
 
-        xEventGroupSetBits(s_wifi_eg, WIFI_CONNECTED_BIT);
+        if (s_wifi_eg)
+        {
+            xEventGroupSetBits(s_wifi_eg, WIFI_CONNECTED_BIT);
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Station connect helpers                                                    */
+/* -------------------------------------------------------------------------- */
+/*
+ * Handles STA mode connection to saved router Wi-Fi credentials.
+ *
+ * This section tries saved SSID/password entries and updates connection state.
+ * It should not start the setup portal automatically.
+ */
+static bool connect_sta(const char *ssid, const char *pass)
+{
+    if (!ssid || strlen(ssid) == 0)
+    {
+        return false;
+    }
+
+    if (!s_wifi_eg)
+    {
+        s_wifi_eg = xEventGroupCreate();
+    }
+
+    s_connecting = true;
+
+    xEventGroupClearBits(s_wifi_eg, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+
+    s_retries = 0;
+    s_connected = false;
+
+    /*
+     * Stop any previous WiFi activity before changing config.
+     * Do not use ESP_ERROR_CHECK here because WiFi may already
+     * be stopped, disconnected, or still transitioning state.
+     */
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    wifi_config_t cfg = {0};
+
+    strncpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid) - 1);
+    strncpy((char *)cfg.sta.password, pass ? pass : "", sizeof(cfg.sta.password) - 1);
+
+    cfg.sta.threshold.authmode = WIFI_AUTH_OPEN;
+
+    esp_err_t err;
+
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "esp_wifi_set_mode failed: %s", esp_err_to_name(err));
+        s_connecting = false;
+        return false;
+    }
+
+    err = esp_wifi_set_config(WIFI_IF_STA, &cfg);
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "esp_wifi_set_config failed: %s", esp_err_to_name(err));
+        s_connecting = false;
+        return false;
+    }
+
+    err = esp_wifi_start();
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "esp_wifi_start failed: %s", esp_err_to_name(err));
+        s_connecting = false;
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Connecting to SSID: %s", ssid);
+
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_eg,
+                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                                           pdTRUE,
+                                           pdFALSE,
+                                           pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
+
+    if (bits & WIFI_CONNECTED_BIT)
+    {
+        ESP_LOGI(TAG, "Connected to SSID: %s", ssid);
+        s_connecting = false;
+        return true;
+    }
+
+    ESP_LOGW(TAG, "Connect failed for SSID: %s", ssid);
+
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    s_connecting = false;
+    return false;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Retry tasks                                                                */
+/* -------------------------------------------------------------------------- */
+/*
+ * Handles delayed and immediate Wi-Fi retry tasks.
+ *
+ * Delayed retry is used after saved credentials fail.
+ * Retry must not run while the SoftAP setup portal is active.
+ */
+static void wifi_retry_later_task(void *arg)
+{
+    (void)arg;
+
+    ESP_LOGI(TAG, "WiFi retry task sleeping for 1 hour");
+
+    vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_LATER_MS));
+
+    if (s_portal_running)
+    {
+        ESP_LOGI(TAG, "Portal is running, skip delayed WiFi retry");
+
+        s_retry_later_task = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Retrying saved WiFi networks after 1 hour");
+
+    s_retries = 0;
+    s_retry_later_task = NULL;
+
+    wifi_manager_init();
+
+    vTaskDelete(NULL);
+}
+
+static void wifi_schedule_retry_later(void)
+{
+    if (s_portal_running)
+    {
+        ESP_LOGI(TAG, "Portal is running, delayed WiFi retry not scheduled");
+        return;
+    }
+
+    if (s_retry_later_task != NULL)
+    {
+        ESP_LOGI(TAG, "WiFi retry task already scheduled");
+        return;
+    }
+
+    BaseType_t ok =
+        xTaskCreate(wifi_retry_later_task, "wifi_retry_later", 4096, NULL, 5, &s_retry_later_task);
+
+    if (ok != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create WiFi retry task");
+        s_retry_later_task = NULL;
+    }
+}
+
+static void wifi_retry_now_task(void *arg)
+{
+    (void)arg;
+
+    if (s_portal_running)
+    {
+        ESP_LOGI(TAG, "Portal is running, skip immediate WiFi retry");
+
+        s_retry_now_task = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Retrying all saved WiFi networks now");
+
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    s_retries = 0;
+    s_connected = false;
+    s_connecting = false;
+    s_retry_now_task = NULL;
+
+    wifi_manager_init();
+
+    vTaskDelete(NULL);
+}
+
+static void wifi_schedule_retry_now(void)
+{
+    if (s_portal_running)
+    {
+        ESP_LOGI(TAG, "Portal is running, immediate WiFi retry not scheduled");
+        return;
+    }
+
+    if (s_retry_now_task != NULL)
+    {
+        ESP_LOGI(TAG, "Immediate WiFi retry task already scheduled");
+        return;
+    }
+
+    BaseType_t ok =
+        xTaskCreate(wifi_retry_now_task, "wifi_retry_now", 4096, NULL, 5, &s_retry_now_task);
+
+    if (ok != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create immediate WiFi retry task");
+        s_retry_now_task = NULL;
     }
 }
 
 /* -------------------------------------------------------------------------- */
 /* Portal HTML                                                                */
 /* -------------------------------------------------------------------------- */
-
+/*
+ * Contains the HTML page shown by the Buddy-Setup captive portal.
+ *
+ * Keep only page content here. Wi-Fi logic and form handling belong in
+ * HTTP handlers.
+ */
 static void build_portal_page(char *html, size_t max_len)
 {
     html[0] = '\0';
@@ -195,9 +452,17 @@ static const char SAVED_HTML[] =
     "</body></html>";
 
 /* -------------------------------------------------------------------------- */
-/* HTTP Helpers                                                               */
+/* HTTP helpers                                                               */
 /* -------------------------------------------------------------------------- */
-
+/*
+ * Small helper functions for the captive portal web server.
+ *
+ * Examples:
+ * - URL decoding
+ * - form parsing
+ * - sending redirects
+ * - sending HTML responses
+ */
 static void url_decode(char *dst, const char *src, size_t max)
 {
     size_t i = 0;
@@ -258,9 +523,15 @@ static bool extract_field(const char *body, const char *field, char *out, size_t
 }
 
 /* -------------------------------------------------------------------------- */
-/* HTTP Handlers                                                              */
+/* HTTP handlers                                                              */
 /* -------------------------------------------------------------------------- */
-
+/*
+ * Handles HTTP requests from the captive portal.
+ *
+ * Examples:
+ * - GET / shows the setup form
+ * - POST /save stores SSID/password credentials
+ */
 static esp_err_t handler_root(httpd_req_t *req)
 {
     char *html = calloc(1, PORTAL_HTML_MAX);
@@ -455,9 +726,13 @@ static esp_err_t handler_update(httpd_req_t *req)
 }
 
 /* -------------------------------------------------------------------------- */
-/* HTTP Server                                                                */
+/* HTTP server control                                                        */
 /* -------------------------------------------------------------------------- */
-
+/*
+ * Starts and stops the HTTP server used by the setup portal.
+ *
+ * This section should only manage server lifecycle, not Wi-Fi connection logic.
+ */
 static void start_http_server(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
@@ -526,234 +801,125 @@ static void start_http_server(void)
 }
 
 /* -------------------------------------------------------------------------- */
-/* Station Connect                                                            */
+/* SoftAP portal control                                                      */
 /* -------------------------------------------------------------------------- */
-
-static bool connect_sta(const char *ssid, const char *pass)
+/*
+ * Starts and stops the Buddy-Setup SoftAP captive portal.
+ *
+ * SoftAP is started only by explicit user action, such as long press on
+ * the clock screen.
+ */
+void wifi_manager_start_portal(void)
 {
-    if (!ssid || strlen(ssid) == 0)
-    {
-        return false;
-    }
-
-    if (!s_wifi_eg)
-    {
-        s_wifi_eg = xEventGroupCreate();
-    }
-
-    s_connecting = true;
-
-    xEventGroupClearBits(s_wifi_eg, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-
-    s_retries = 0;
-    s_connected = false;
-
-    /*
-     * Stop any previous WiFi activity before changing config.
-     * Do not use ESP_ERROR_CHECK here because WiFi may already
-     * be stopped, disconnected, or still transitioning state.
-     */
-    esp_wifi_disconnect();
-    vTaskDelay(pdMS_TO_TICKS(300));
-
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    wifi_config_t cfg = {0};
-
-    strncpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid) - 1);
-    strncpy((char *)cfg.sta.password, pass ? pass : "", sizeof(cfg.sta.password) - 1);
-
-    cfg.sta.threshold.authmode = WIFI_AUTH_OPEN;
-
-    esp_err_t err;
-
-    err = esp_wifi_set_mode(WIFI_MODE_STA);
-    if (err != ESP_OK)
-    {
-        ESP_LOGW(TAG, "esp_wifi_set_mode failed: %s", esp_err_to_name(err));
-        s_connecting = false;
-        return false;
-    }
-
-    err = esp_wifi_set_config(WIFI_IF_STA, &cfg);
-    if (err != ESP_OK)
-    {
-        ESP_LOGW(TAG, "esp_wifi_set_config failed: %s", esp_err_to_name(err));
-        s_connecting = false;
-        return false;
-    }
-
-    err = esp_wifi_start();
-    if (err != ESP_OK)
-    {
-        ESP_LOGW(TAG, "esp_wifi_start failed: %s", esp_err_to_name(err));
-        s_connecting = false;
-        return false;
-    }
-
-    ESP_LOGI(TAG, "Connecting to SSID: %s", ssid);
-
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_eg,
-                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                           pdTRUE,
-                                           pdFALSE,
-                                           pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
-
-    if (bits & WIFI_CONNECTED_BIT)
-    {
-        ESP_LOGI(TAG, "Connected to SSID: %s", ssid);
-        s_connecting = false;
-        return true;
-    }
-
-    ESP_LOGW(TAG, "Connect failed for SSID: %s", ssid);
-
-    esp_wifi_disconnect();
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(300));
-
-    s_connecting = false;
-    return false;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Retry Task                                                                 */
-/* -------------------------------------------------------------------------- */
-
-static void wifi_retry_later_task(void *arg)
-{
-    (void)arg;
-
-    ESP_LOGI(TAG, "WiFi retry task sleeping for 1 hour");
-
-    vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_LATER_MS));
-
-    /*
-     * If the user opened the setup portal while this task was sleeping,
-     * do not retry STA now. Retrying would stop/change WiFi mode and
-     * make Buddy-Setup disappear.
-     */
-    if (s_portal_running)
-    {
-        ESP_LOGI(TAG, "Portal is running, skip delayed WiFi retry");
-
-        s_retry_later_task = NULL;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Retrying saved WiFi networks after 1 hour");
-
-    s_retries = 0;
-    s_retry_later_task = NULL;
-
-    wifi_manager_init();
-
-    vTaskDelete(NULL);
-}
-
-static void wifi_schedule_retry_later(void)
-{
-    /*
-     * Do not schedule background retry while setup portal is active.
-     * Otherwise the retry can later switch WiFi mode and kill SoftAP.
-     */
-    if (s_portal_running)
-    {
-        ESP_LOGI(TAG, "Portal is running, delayed WiFi retry not scheduled");
-        return;
-    }
+    ESP_LOGI(TAG, "Starting softAP captive portal...");
 
     if (s_retry_later_task != NULL)
     {
-        ESP_LOGI(TAG, "WiFi retry task already scheduled");
-        return;
-    }
-
-    BaseType_t ok =
-        xTaskCreate(wifi_retry_later_task,
-                    "wifi_retry_later",
-                    4096,
-                    NULL,
-                    5,
-                    &s_retry_later_task);
-
-    if (ok != pdPASS)
-    {
-        ESP_LOGE(TAG, "Failed to create WiFi retry task");
+        vTaskDelete(s_retry_later_task);
         s_retry_later_task = NULL;
-    }
-}
-
-static void wifi_retry_now_task(void *arg)
-{
-    (void)arg;
-
-    ESP_LOGI(TAG, "Retrying all saved WiFi networks now");
-
-    /*
-     * Stop WiFi first so the next credential starts from a clean state.
-     */
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(300));
-
-    s_retries = 0;
-    s_connected = false;
-    s_retry_now_task = NULL;
-
-    /*
-     * This will try all saved credentials from the beginning.
-     * If all fail, wifi_manager_init() will schedule the 1-hour retry.
-     */
-    wifi_manager_init();
-
-    vTaskDelete(NULL);
-}
-
-static void wifi_schedule_retry_now(void)
-{
-    if (s_portal_running)
-    {
-        ESP_LOGI(TAG, "Portal is running, immediate WiFi retry not scheduled");
-        return;
+        ESP_LOGI(TAG, "Pending delayed WiFi retry cancelled");
     }
 
     if (s_retry_now_task != NULL)
     {
-        ESP_LOGI(TAG, "Immediate WiFi retry task already scheduled");
-        return;
-    }
-
-    BaseType_t ok =
-        xTaskCreate(wifi_retry_now_task,
-                    "wifi_retry_now",
-                    4096,
-                    NULL,
-                    5,
-                    &s_retry_now_task);
-
-    if (ok != pdPASS)
-    {
-        ESP_LOGE(TAG, "Failed to create immediate WiFi retry task");
+        vTaskDelete(s_retry_now_task);
         s_retry_now_task = NULL;
+        ESP_LOGI(TAG, "Pending immediate WiFi retry cancelled");
     }
+
+    s_connected = false;
+    s_connecting = false;
+    s_retries = 0;
+    s_portal_running = true;
+
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    wifi_config_t ap_cfg = {
+        .ap =
+            {
+                .ssid = WIFI_AP_SSID,
+                .ssid_len = strlen(WIFI_AP_SSID),
+                .max_connection = 4,
+                .authmode = WIFI_AUTH_OPEN,
+            },
+    };
+
+    if (strlen(WIFI_AP_PASSWORD) > 0)
+    {
+        strncpy((char *)ap_cfg.ap.password, WIFI_AP_PASSWORD, sizeof(ap_cfg.ap.password) - 1);
+
+        ap_cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "SoftAP started: SSID=%s, IP=192.168.4.1", WIFI_AP_SSID);
+
+    if (s_httpd == NULL)
+    {
+        start_http_server();
+    }
+}
+
+void wifi_manager_stop_portal(void)
+{
+    ESP_LOGI(TAG, "Stopping captive portal...");
+
+    if (s_httpd != NULL)
+    {
+        httpd_stop(s_httpd);
+        s_httpd = NULL;
+
+        ESP_LOGI(TAG, "HTTP server stopped");
+    }
+
+    esp_err_t err = esp_wifi_stop();
+
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT && err != ESP_ERR_WIFI_NOT_STARTED)
+    {
+        ESP_LOGW(TAG, "esp_wifi_stop() failed: %s", esp_err_to_name(err));
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    s_connected = false;
+    s_connecting = false;
+    s_retries = 0;
+    s_portal_running = false;
+
+    ESP_LOGI(TAG, "Buddy-Setup stopped, trying saved WiFi once");
+
+    wifi_schedule_retry_now();
 }
 
 /* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
-
+/*
+ * Functions called by other modules.
+ *
+ * Keep internal helper functions static. Only functions declared in
+ * wifi_manager.h should be here.
+ */
 void wifi_manager_init(void)
 {
+    if (s_portal_running)
+    {
+        ESP_LOGI(TAG, "Portal is running, skip STA init");
+        return;
+    }
+
     if (!s_wifi_eg)
     {
         s_wifi_eg = xEventGroupCreate();
     }
 
-    /* Initialize TCP/IP stack and event loop only once */
     static bool s_netif_initialized = false;
 
     if (!s_netif_initialized)
@@ -763,7 +929,6 @@ void wifi_manager_init(void)
         s_netif_initialized = true;
     }
 
-    /* Create default network interfaces only once */
     if (s_sta_netif == NULL)
     {
         s_sta_netif = esp_netif_create_default_wifi_sta();
@@ -774,7 +939,6 @@ void wifi_manager_init(void)
         s_ap_netif = esp_netif_create_default_wifi_ap();
     }
 
-    /* Initialize WiFi driver only once */
     static bool s_wifi_initialized = false;
 
     if (!s_wifi_initialized)
@@ -785,7 +949,6 @@ void wifi_manager_init(void)
         s_wifi_initialized = true;
     }
 
-    /* Register event handlers only once */
     static bool s_handlers_registered = false;
 
     if (!s_handlers_registered)
@@ -847,108 +1010,6 @@ void wifi_manager_init(void)
     s_connecting = false;
 
     wifi_schedule_retry_later();
-}
-
-void wifi_manager_start_portal(void)
-{
-    ESP_LOGI(TAG, "Starting softAP captive portal...");
-
-    /*
-     * User manually opened setup portal.
-     * Cancel delayed/immediate STA retry so it cannot kill SoftAP.
-     */
-    if (s_retry_later_task != NULL)
-    {
-        vTaskDelete(s_retry_later_task);
-        s_retry_later_task = NULL;
-        ESP_LOGI(TAG, "Pending delayed WiFi retry cancelled");
-    }
-
-    if (s_retry_now_task != NULL)
-    {
-        vTaskDelete(s_retry_now_task);
-        s_retry_now_task = NULL;
-        ESP_LOGI(TAG, "Pending immediate WiFi retry cancelled");
-    }
-
-    s_connected = false;
-    s_connecting = false;
-    s_retries = 0;
-    s_portal_running = true;
-
-    esp_wifi_disconnect();
-    vTaskDelay(pdMS_TO_TICKS(100));
-
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    wifi_config_t ap_cfg = {
-        .ap =
-            {
-                .ssid = WIFI_AP_SSID,
-                .ssid_len = strlen(WIFI_AP_SSID),
-                .max_connection = 4,
-                .authmode = WIFI_AUTH_OPEN,
-            },
-    };
-
-    if (strlen(WIFI_AP_PASSWORD) > 0)
-    {
-        strncpy((char *)ap_cfg.ap.password,
-                WIFI_AP_PASSWORD,
-                sizeof(ap_cfg.ap.password) - 1);
-
-        ap_cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "SoftAP started: SSID=%s, IP=192.168.4.1", WIFI_AP_SSID);
-
-    if (s_httpd == NULL)
-    {
-        start_http_server();
-    }
-}
-
-void wifi_manager_stop_portal(void)
-{
-    ESP_LOGI(TAG, "Stopping captive portal...");
-
-    if (s_httpd != NULL)
-    {
-        httpd_stop(s_httpd);
-        s_httpd = NULL;
-
-        ESP_LOGI(TAG, "HTTP server stopped");
-    }
-
-    esp_err_t err = esp_wifi_stop();
-
-    if (err != ESP_OK &&
-        err != ESP_ERR_WIFI_NOT_INIT &&
-        err != ESP_ERR_WIFI_NOT_STARTED)
-    {
-        ESP_LOGW(TAG, "esp_wifi_stop() failed: %s", esp_err_to_name(err));
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    s_connected = false;
-    s_connecting = false;
-    s_retries = 0;
-    s_portal_running = false;
-
-    /*
-     * User explicitly exited setup portal.
-     * Try saved WiFi once now.
-     * If it fails, wifi_manager_init() will schedule the normal 1-hour retry.
-     */
-    ESP_LOGI(TAG, "Buddy-Setup stopped, trying saved WiFi once");
-
-    wifi_schedule_retry_now();
 }
 
 bool wifi_manager_is_connected(void)
