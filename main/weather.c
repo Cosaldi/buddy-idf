@@ -31,6 +31,8 @@
 
 static const char *TAG = "weather";
 
+static TaskHandle_t s_weather_task_handle = NULL;
+
 /* ── Internal state ──────────────────────────────────────────────────── */
 static weather_data_t s_data = {0};
 static weather_forecast_item_t s_forecast[WEATHER_FORECAST_MAX] = {0};
@@ -194,7 +196,8 @@ static bool json_get_float_from_object(const char *obj, const char *key, float *
 
 static bool parse_forecast(const char *json)
 {
-    if (!json || strlen(json) < 10) {
+    if (!json || strlen(json) < 10)
+    {
         ESP_LOGE(TAG, "%s", "Empty forecast JSON");
         return false;
     }
@@ -206,9 +209,11 @@ static bool parse_forecast(const char *json)
 
     const char *p = json;
 
-    while (s_forecast_count < WEATHER_FORECAST_MAX) {
+    while (s_forecast_count < WEATHER_FORECAST_MAX)
+    {
         const char *dt_pos = strstr(p, "\"dt\":");
-        if (!dt_pos) {
+        if (!dt_pos)
+        {
             break;
         }
 
@@ -218,7 +223,8 @@ static bool parse_forecast(const char *json)
          * Only use future forecast slots.
          * +60 avoids showing a slot that is basically already passed.
          */
-        if (ts <= now + 60) {
+        if (ts <= now + 60)
+        {
             p = dt_pos + 5;
             continue;
         }
@@ -242,9 +248,7 @@ static bool parse_forecast(const char *json)
 
         struct tm tm_local;
         localtime_r(&ts, &tm_local);
-        snprintf(item->time, sizeof(item->time), "%02d:%02d",
-                 tm_local.tm_hour,
-                 tm_local.tm_min);
+        snprintf(item->time, sizeof(item->time), "%02d:%02d", tm_local.tm_hour, tm_local.tm_min);
 
         ESP_LOGI(TAG,
                  "Forecast[%d]: %s %.1f C %s",
@@ -255,7 +259,8 @@ static bool parse_forecast(const char *json)
 
         s_forecast_count++;
 
-        if (!next_dt) {
+        if (!next_dt)
+        {
             break;
         }
 
@@ -279,7 +284,8 @@ static bool http_get_url(const char *url)
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
-    if (!client) {
+    if (!client)
+    {
         ESP_LOGE(TAG, "%s", "HTTP client init failed");
         return false;
     }
@@ -288,12 +294,14 @@ static bool http_get_url(const char *url)
     int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
 
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "HTTP request failed: %d", err);
         return false;
     }
 
-    if (status != 200) {
+    if (status != 200)
+    {
         ESP_LOGW(TAG, "OWM returned HTTP %d - response: %s", status, s_http_buf);
         return false;
     }
@@ -303,7 +311,8 @@ static bool http_get_url(const char *url)
 
 static void fetch_weather(void)
 {
-    if (!wifi_manager_is_connected()) {
+    if (!wifi_manager_is_connected())
+    {
         ESP_LOGW(TAG, "%s", "WiFi not connected, skipping fetch");
         return;
     }
@@ -315,12 +324,14 @@ static void fetch_weather(void)
     char url[256];
     build_current_url(url, sizeof(url));
 
-    if (http_get_url(url)) {
+    if (http_get_url(url))
+    {
         ESP_LOGI(TAG, "Current response (%d bytes): %.80s...", s_http_len, s_http_buf);
 
         weather_data_t fresh = {0};
 
-        if (parse_weather(s_http_buf, &fresh)) {
+        if (parse_weather(s_http_buf, &fresh))
+        {
             s_data = fresh;
 
             ESP_LOGI(TAG,
@@ -331,7 +342,9 @@ static void fetch_weather(void)
                      s_data.humidity);
 
             display_update_weather(s_data.condition, s_data.temp_c);
-        } else {
+        }
+        else
+        {
             ESP_LOGW(TAG, "%s", "Failed to parse current weather JSON");
         }
     }
@@ -342,17 +355,21 @@ static void fetch_weather(void)
 
     build_forecast_url(url, sizeof(url));
 
-    if (http_get_url(url)) {
+    if (http_get_url(url))
+    {
         ESP_LOGI(TAG, "Forecast response (%d bytes): %.80s...", s_http_len, s_http_buf);
 
-        if (parse_forecast(s_http_buf)) {
+        if (parse_forecast(s_http_buf))
+        {
             ESP_LOGI(TAG, "Forecast parsed: %d slots", s_forecast_count);
 
             /*
              * If forecast screen is currently visible, display.c can refresh
              * it when user toggles or when current weather updates.
              */
-        } else {
+        }
+        else
+        {
             ESP_LOGW(TAG, "%s", "Failed to parse forecast JSON");
         }
     }
@@ -363,13 +380,45 @@ static void weather_task(void *arg)
 {
     (void)arg;
 
-    /* First fetch immediately after boot */
-    fetch_weather();
+    s_weather_task_handle = xTaskGetCurrentTaskHandle();
 
     while (1)
     {
-        vTaskDelay(pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_S * 1000));
-        fetch_weather();
+        ESP_LOGI(TAG, "Weather update cycle starting");
+
+        /*
+         * Battery-friendly behavior:
+         * Wi-Fi is normally off. Turn it on only when weather data is needed.
+         */
+        if (wifi_manager_connect_saved_once())
+        {
+            /*
+             * Fetch current weather + forecast.
+             * Your fetch_weather() already handles both if you added forecast.
+             */
+            fetch_weather();
+
+            /*
+             * Turn Wi-Fi off again after the weather update.
+             */
+            wifi_manager_stop_sta();
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Weather update skipped, WiFi unavailable");
+
+            /*
+             * Make sure Wi-Fi is stopped after failed connection attempt.
+             */
+            wifi_manager_stop_sta();
+        }
+
+        ESP_LOGI(TAG, "Weather task sleeping for %d seconds", WEATHER_UPDATE_INTERVAL_S);
+
+        /*
+         * Sleep until interval expires OR another module requests update.
+         */
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_S * 1000));
     }
 }
 
@@ -398,18 +447,29 @@ int weather_get_forecast_count(void)
 
 bool weather_get_forecast(int index, weather_forecast_item_t *out)
 {
-    if (!out) {
+    if (!out)
+    {
         return false;
     }
 
-    if (index < 0 || index >= s_forecast_count) {
+    if (index < 0 || index >= s_forecast_count)
+    {
         return false;
     }
 
-    if (!s_forecast[index].valid) {
+    if (!s_forecast[index].valid)
+    {
         return false;
     }
 
     *out = s_forecast[index];
     return true;
+}
+
+void weather_request_update(void)
+{
+    if (s_weather_task_handle != NULL)
+    {
+        xTaskNotifyGive(s_weather_task_handle);
+    }
 }

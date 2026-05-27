@@ -70,3 +70,6 @@ void wifi_manager_stop_portal(void);
  * @return false if station is disconnected.
  */
 bool wifi_manager_is_connected(void);
+
+bool wifi_manager_connect_saved_once(void);
+void wifi_manager_stop_sta(void);

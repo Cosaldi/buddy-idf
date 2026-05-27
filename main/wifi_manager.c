@@ -22,6 +22,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#include "weather.h"
 #include "wifi_credentials.h"
 #include "wifi_manager.h"
 
@@ -49,6 +50,8 @@ static EventGroupHandle_t s_wifi_eg = NULL;
 static bool s_connected = false;
 static bool s_connecting = false;
 static bool s_portal_running = false;
+static bool s_stopping_sta = false;
+static bool s_suppress_retry_schedule = false;
 
 static int s_retries = 0;
 
@@ -104,6 +107,16 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
 
         ESP_LOGW(TAG, "WiFi disconnected, reason=%d", disc ? disc->reason : -1);
 
+        if (s_stopping_sta)
+        {
+            ESP_LOGI(TAG, "WiFi disconnected because STA is stopping");
+            s_stopping_sta = false;
+            s_connected = false;
+            s_connecting = false;
+            s_retries = 0;
+            return;
+        }
+
         /*
          * Ignore STA disconnects while the setup portal is active.
          * Starting SoftAP intentionally stops/changes STA mode, and retrying here
@@ -156,6 +169,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
     }
 }
 
+
 /* -------------------------------------------------------------------------- */
 /* Station connect helpers                                                    */
 /* -------------------------------------------------------------------------- */
@@ -167,6 +181,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
  */
 static bool connect_sta(const char *ssid, const char *pass)
 {
+    s_stopping_sta = false;
+
     if (!ssid || strlen(ssid) == 0)
     {
         return false;
@@ -200,7 +216,7 @@ static bool connect_sta(const char *ssid, const char *pass)
     strncpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid) - 1);
     strncpy((char *)cfg.sta.password, pass ? pass : "", sizeof(cfg.sta.password) - 1);
 
-    cfg.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
 
     esp_err_t err;
 
@@ -293,6 +309,12 @@ static void wifi_retry_later_task(void *arg)
 
 static void wifi_schedule_retry_later(void)
 {
+    if (s_suppress_retry_schedule)
+    {
+        ESP_LOGI(TAG, "Delayed WiFi retry suppressed");
+        return;
+    }
+
     if (s_portal_running)
     {
         ESP_LOGI(TAG, "Portal is running, delayed WiFi retry not scheduled");
@@ -345,6 +367,12 @@ static void wifi_retry_now_task(void *arg)
 
 static void wifi_schedule_retry_now(void)
 {
+    if (s_suppress_retry_schedule)
+    {
+        ESP_LOGI(TAG, "Immediate WiFi retry suppressed");
+        return;
+    }
+
     if (s_portal_running)
     {
         ESP_LOGI(TAG, "Portal is running, immediate WiFi retry not scheduled");
@@ -830,6 +858,7 @@ void wifi_manager_start_portal(void)
     s_connected = false;
     s_connecting = false;
     s_retries = 0;
+    s_stopping_sta = true;
     s_portal_running = true;
 
     esp_wifi_disconnect();
@@ -895,7 +924,7 @@ void wifi_manager_stop_portal(void)
 
     ESP_LOGI(TAG, "Buddy-Setup stopped, trying saved WiFi once");
 
-    wifi_schedule_retry_now();
+    weather_request_update();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1015,4 +1044,78 @@ void wifi_manager_init(void)
 bool wifi_manager_is_connected(void)
 {
     return s_connected;
+}
+
+bool wifi_manager_connect_saved_once(void)
+{
+    if (s_portal_running)
+    {
+        ESP_LOGW(TAG, "Portal is running, skip saved WiFi connect");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Connecting saved WiFi once");
+
+    s_connected = false;
+    s_connecting = false;
+    s_retries = 0;
+
+    /*
+     * Weather task owns the retry interval.
+     * Do not let wifi_manager create its own retry task here.
+     */
+    s_suppress_retry_schedule = true;
+
+    wifi_manager_init();
+
+    const int timeout_ms = 15000;
+    const int step_ms = 250;
+    int waited_ms = 0;
+
+    while (waited_ms < timeout_ms)
+    {
+        if (wifi_manager_is_connected())
+        {
+            s_suppress_retry_schedule = false;
+
+            ESP_LOGI(TAG, "Saved WiFi connected");
+            return true;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(step_ms));
+        waited_ms += step_ms;
+    }
+
+    s_suppress_retry_schedule = false;
+
+    ESP_LOGW(TAG, "Saved WiFi connect timeout");
+
+    return false;
+}
+
+void wifi_manager_stop_sta(void)
+{
+    if (s_portal_running)
+    {
+        ESP_LOGI(TAG, "Portal is running, do not stop WiFi");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Stopping STA WiFi to save power");
+
+    s_stopping_sta = true;
+
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    esp_err_t err = esp_wifi_stop();
+
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED && err != ESP_ERR_WIFI_NOT_INIT)
+    {
+        ESP_LOGW(TAG, "esp_wifi_stop() failed: %s", esp_err_to_name(err));
+    }
+
+    s_connected = false;
+    s_connecting = false;
+    s_retries = 0;
 }

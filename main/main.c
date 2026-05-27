@@ -48,15 +48,11 @@ void app_main(void)
     /* WiFi — blocks until connected or times out */
     wifi_manager_init();
 
-    if (wifi_manager_is_connected())
-    {
-        ntp_sync_init();
-        weather_init();
-    }
-    else
-    {
-        ESP_LOGW(TAG, "WiFi not connected, skip NTP/weather startup");
-    }
+    /* NTP — sync time after WiFi is up */
+    ntp_sync_init();
+
+    /* Weather — initial fetch; subsequent fetches on a timer */
+    weather_init(); 
 
     /* Hand off to main UI task */
     xTaskCreate(main_task, "main_task", 8192, NULL, 5, NULL);

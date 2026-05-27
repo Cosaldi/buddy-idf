@@ -74,3 +74,5 @@ bool weather_get(weather_data_t *out);
 int weather_get_forecast_count(void);
 
 bool weather_get_forecast(int index, weather_forecast_item_t *out);
+
+void weather_request_update(void);
