@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include "battery.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -15,6 +16,7 @@
 #include "weather.h"
 #include "touch.h"
 #include "display.h"
+#include "battery.h"
 
 static const char *TAG = "deskbuddy";
 
@@ -26,8 +28,8 @@ void app_main(void)
 {
     /* NVS — required by WiFi */
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
-        ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
@@ -40,6 +42,8 @@ void app_main(void)
 
     /* Touch (GPIO10, TTP223 — simple digital input) */
     touch_init();
+
+    battery_init();
 
     /* WiFi — blocks until connected or times out */
     wifi_manager_init();
@@ -57,15 +61,17 @@ void app_main(void)
 /* ── Main UI task ────────────────────────────────────────────────────── */
 static void main_task(void *arg)
 {
-    (void)arg;  /* suppress unused-parameter warning */
+    (void)arg; /* suppress unused-parameter warning */
     ESP_LOGI(TAG, "%s", "Main task started");
 
     display_reset_activity();
 
-    while (1) {
+    while (1)
+    {
         uint32_t now = esp_timer_get_time() / 1000;
         uint32_t last_act = display_get_last_activity_ms();
-        if (now - last_act >= 90000) {
+        if (now - last_act >= 90000)
+        {
             display_suspend();
         }
 

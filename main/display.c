@@ -30,6 +30,7 @@
 #include "display.h"
 #include "eye_anim.h"
 #include "weather.h"
+#include "battery.h"
 
 #include "sdkconfig.h"
 
@@ -54,6 +55,7 @@ static lv_obj_t *s_screens[SCREEN_COUNT];
 /* --- Clock widgets --- */
 static lv_obj_t *s_lbl_time = NULL;
 static lv_obj_t *s_lbl_date = NULL;
+static lv_obj_t *s_lbl_battery = NULL;
 
 /* --- Weather widgets --- */
 static lv_obj_t *s_lbl_weather_title = NULL;
@@ -335,6 +337,12 @@ static void build_screen_clock(lv_obj_t *parent)
     lv_label_set_text(s_lbl_date, "--- -- --- ----");
     lv_obj_set_style_text_color(s_lbl_date, lv_color_white(), 0);
     lv_obj_align(s_lbl_date, LV_ALIGN_CENTER, 0, 16);
+
+    s_lbl_battery = lv_label_create(parent);
+    lv_label_set_text(s_lbl_battery, "BAT:-");
+    lv_obj_set_style_text_color(s_lbl_battery, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_battery, &lv_font_montserrat_10, 0);
+    lv_obj_align(s_lbl_battery, LV_ALIGN_TOP_RIGHT, -2, 2);
 }
 
 static void build_screen_weather(lv_obj_t *parent)
@@ -375,13 +383,31 @@ static void build_screen_weather(lv_obj_t *parent)
 static void clock_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+
     if (s_current_screen != SCREEN_CLOCK)
+    {
         return;
-    char time_buf[16], date_buf[24];
+    }
+
+    char time_buf[16];
+    char date_buf[24];
+
     ntp_get_time_str(time_buf, sizeof(time_buf));
     ntp_get_date_str(date_buf, sizeof(date_buf));
+
     lv_label_set_text(s_lbl_time, time_buf);
     lv_label_set_text(s_lbl_date, date_buf);
+
+    static uint32_t s_last_battery_update_ms = 0;
+
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
+    if (s_lbl_battery && (now_ms - s_last_battery_update_ms >= 30000))
+    {
+        lv_label_set_text(s_lbl_battery, battery_get_level_text());
+        s_last_battery_update_ms = now_ms;
+    }
+    // ESP_LOGI("BAT", "Voltage: %.2f", battery_get_voltage());
 }
 
 static void eye_timer_cb(lv_timer_t *timer)
@@ -734,7 +760,8 @@ void display_show_splash(void)
 
 void display_show_birthday(void)
 {
-    if (s_splash_timer) {
+    if (s_splash_timer)
+    {
         lv_timer_del(s_splash_timer);
         s_splash_timer = NULL;
     }

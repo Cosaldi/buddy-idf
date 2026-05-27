@@ -8,10 +8,12 @@ idf_component_register(
         "touch.c"
         "display.c"
         "eye_anim.c"
+        "battery.c"
     INCLUDE_DIRS
         "."
     REQUIRES
         # ESP-IDF built-ins
+        esp_adc
         esp_wifi
         esp_event
         esp_netif
