@@ -31,8 +31,8 @@
 #define WEATHER_UNITS         "metric"
 #define WEATHER_LANG          "en"
 
-/* How often to re-fetch (seconds). Free OWM updates every 10 min. */
-#define WEATHER_UPDATE_INTERVAL_S 600
+/* How often to re-fetch (seconds). Free OWM updates every 60 min. */
+#define WEATHER_UPDATE_INTERVAL_S 3600
 
 /* Show next 3 future forecast slots, e.g. 21:00, 00:00, 03:00 */
 #define WEATHER_FORECAST_MAX 3
