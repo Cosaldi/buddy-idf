@@ -28,6 +28,7 @@
 #include "wifi_manager.h"
 #include "display.h"
 #include "weather.h"
+#include "wifi_manager.h"
 
 static const char *TAG = "weather";
 
@@ -382,43 +383,44 @@ static void weather_task(void *arg)
 
     s_weather_task_handle = xTaskGetCurrentTaskHandle();
 
+    ESP_LOGI(TAG,
+             "Weather task started (city: %s, interval: %ds)",
+             WEATHER_CITY,
+             WEATHER_UPDATE_INTERVAL_S);
+
     while (1)
     {
+        /*
+         * Wait until:
+         * - the normal 1-hour interval expires, or
+         * - another module calls weather_request_update()
+         *
+         * This prevents weather_task from immediately retrying Wi-Fi
+         * right after boot Wi-Fi already failed.
+         */
+        ulTaskNotifyTake(
+            pdTRUE,
+            pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_S * 1000)
+        );
+
+        if (wifi_manager_is_portal_running())
+        {
+            ESP_LOGI(TAG, "WiFi portal is running, skip weather update");
+            continue;
+        }
+
         ESP_LOGI(TAG, "Weather update cycle starting");
 
-        /*
-         * Battery-friendly behavior:
-         * Wi-Fi is normally off. Turn it on only when weather data is needed.
-         */
         if (wifi_manager_connect_saved_once())
         {
-            /*
-             * Fetch current weather + forecast.
-             * Your fetch_weather() already handles both if you added forecast.
-             */
             fetch_weather();
-
-            /*
-             * Turn Wi-Fi off again after the weather update.
-             */
             wifi_manager_stop_sta();
         }
         else
         {
             ESP_LOGW(TAG, "Weather update skipped, WiFi unavailable");
-
-            /*
-             * Make sure Wi-Fi is stopped after failed connection attempt.
-             */
             wifi_manager_stop_sta();
         }
-
-        ESP_LOGI(TAG, "Weather task sleeping for %d seconds", WEATHER_UPDATE_INTERVAL_S);
-
-        /*
-         * Sleep until interval expires OR another module requests update.
-         */
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_S * 1000));
     }
 }
 

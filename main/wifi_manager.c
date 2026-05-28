@@ -1110,7 +1110,9 @@ void wifi_manager_stop_sta(void)
 
     esp_err_t err = esp_wifi_stop();
 
-    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED && err != ESP_ERR_WIFI_NOT_INIT)
+    if (err != ESP_OK &&
+        err != ESP_ERR_WIFI_NOT_STARTED &&
+        err != ESP_ERR_WIFI_NOT_INIT)
     {
         ESP_LOGW(TAG, "esp_wifi_stop() failed: %s", esp_err_to_name(err));
     }
@@ -1118,4 +1120,9 @@ void wifi_manager_stop_sta(void)
     s_connected = false;
     s_connecting = false;
     s_retries = 0;
+}
+
+bool wifi_manager_is_portal_running(void)
+{
+    return s_portal_running;
 }

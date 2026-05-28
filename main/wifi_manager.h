@@ -73,3 +73,4 @@ bool wifi_manager_is_connected(void);
 
 bool wifi_manager_connect_saved_once(void);
 void wifi_manager_stop_sta(void);
+bool wifi_manager_is_portal_running(void);
