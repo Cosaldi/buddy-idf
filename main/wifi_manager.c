@@ -261,6 +261,8 @@ static bool connect_sta(const char *ssid, const char *pass)
 
     ESP_LOGW(TAG, "Connect failed for SSID: %s", ssid);
 
+    s_stopping_sta = true;
+
     esp_wifi_disconnect();
     vTaskDelay(pdMS_TO_TICKS(200));
 
@@ -1054,21 +1056,23 @@ bool wifi_manager_connect_saved_once(void)
         return false;
     }
 
+    if (wifi_manager_is_connected())
+    {
+        ESP_LOGI(TAG, "WiFi already connected, skip reconnect");
+        return true;
+    }
+
     ESP_LOGI(TAG, "Connecting saved WiFi once");
 
     s_connected = false;
     s_connecting = false;
     s_retries = 0;
 
-    /*
-     * Weather task owns the retry interval.
-     * Do not let wifi_manager create its own retry task here.
-     */
     s_suppress_retry_schedule = true;
 
     wifi_manager_init();
 
-    const int timeout_ms = 15000;
+    const int timeout_ms = WIFI_CONNECT_TIMEOUT_MS;
     const int step_ms = 250;
     int waited_ms = 0;
 
@@ -1077,7 +1081,6 @@ bool wifi_manager_connect_saved_once(void)
         if (wifi_manager_is_connected())
         {
             s_suppress_retry_schedule = false;
-
             ESP_LOGI(TAG, "Saved WiFi connected");
             return true;
         }
@@ -1089,7 +1092,6 @@ bool wifi_manager_connect_saved_once(void)
     s_suppress_retry_schedule = false;
 
     ESP_LOGW(TAG, "Saved WiFi connect timeout");
-
     return false;
 }
 

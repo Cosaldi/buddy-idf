@@ -28,7 +28,6 @@
 #include "wifi_manager.h"
 #include "display.h"
 #include "weather.h"
-#include "wifi_manager.h"
 
 static const char *TAG = "weather";
 
@@ -392,34 +391,39 @@ static void weather_task(void *arg)
     {
         /*
          * Wait until:
-         * - the normal 1-hour interval expires, or
-         * - another module calls weather_request_update()
-         *
-         * This prevents weather_task from immediately retrying Wi-Fi
-         * right after boot Wi-Fi already failed.
+         * - normal interval expires, or
+         * - weather_request_update() is called
          */
-        ulTaskNotifyTake(
-            pdTRUE,
-            pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_S * 1000)
-        );
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_S * 1000));
 
         if (wifi_manager_is_portal_running())
         {
             ESP_LOGI(TAG, "WiFi portal is running, skip weather update");
+            display_show_sync_status("Skipped", "Portal active");
             continue;
         }
 
         ESP_LOGI(TAG, "Weather update cycle starting");
+        display_show_sync_status("Syncing...", "WiFi...");
 
         if (wifi_manager_connect_saved_once())
         {
+            display_show_sync_status("Syncing...", "Weather...");
+
+            vTaskDelay(pdMS_TO_TICKS(1500));
             fetch_weather();
+
             wifi_manager_stop_sta();
+
+            display_show_sync_idle(true);
         }
         else
         {
             ESP_LOGW(TAG, "Weather update skipped, WiFi unavailable");
+
             wifi_manager_stop_sta();
+
+            display_show_sync_idle(false);
         }
     }
 }
@@ -428,10 +432,13 @@ static void weather_task(void *arg)
 void weather_init(void)
 {
     xTaskCreate(weather_task, "weather_task", 8192, NULL, 4, NULL);
-    ESP_LOGI(TAG,
-             "Weather task started (city: %s, interval: %ds)",
-             WEATHER_CITY,
-             WEATHER_UPDATE_INTERVAL_S);
+
+    /*
+     * Give weather_task time to store its task handle.
+     */
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    weather_request_update();
 }
 
 bool weather_get(weather_data_t *out)

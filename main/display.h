@@ -26,7 +26,8 @@ typedef enum {
     SCREEN_FACE,
     SCREEN_CLOCK,
     SCREEN_WEATHER,
-    SCREEN_WIFI,
+    SCREEN_SYNC,
+    SCREEN_PORTAL,
     SCREEN_BIRTHDAY,
     SCREEN_COUNT
 } display_screen_t;
@@ -81,3 +82,5 @@ bool display_is_suspended(void);
 void display_show_splash(void);
 void display_show_birthday(void);
 void display_finish_splash(void);
+void display_show_sync_status(const char *line1, const char *line2);
+void display_show_sync_idle(bool ok);

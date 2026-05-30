@@ -33,6 +33,7 @@
 #include "battery.h"
 
 #include "sdkconfig.h"
+#include "widgets/lv_label.h"
 
 #if CONFIG_DISPLAY_CONTROLLER_SH1106
 #include "esp_lcd_panel_sh1106.h"
@@ -63,6 +64,10 @@ static lv_obj_t *s_lbl_weather_cond = NULL;
 static lv_obj_t *s_lbl_weather_temp = NULL;
 static lv_obj_t *s_lbl_forecast[WEATHER_FORECAST_MAX] = {0};
 
+static lv_obj_t *s_lbl_sync_title = NULL;
+static lv_obj_t *s_lbl_sync_status = NULL;
+static lv_obj_t *s_lbl_sync_last = NULL;
+
 static bool s_weather_forecast_mode = false;
 
 /* --- Eye expression cycling --- */
@@ -83,9 +88,10 @@ static void eye_test_all_task(void *arg);
 static void build_screen_face(lv_obj_t *parent);
 static void build_screen_clock(lv_obj_t *parent);
 static void build_screen_weather(lv_obj_t *parent);
-static void build_screen_wifi(lv_obj_t *parent);
+static void build_screen_portal(lv_obj_t *parent);
 static void build_screen_splash(lv_obj_t *parent);
 static void build_screen_birthday(lv_obj_t *parent);
+static void build_screen_sync(lv_obj_t *parent);
 static void clock_timer_cb(lv_timer_t *timer);
 static void eye_timer_cb(lv_timer_t *timer);
 static void splash_timer_cb(lv_timer_t *timer);
@@ -226,7 +232,8 @@ void display_init(void)
     build_screen_face(s_screens[SCREEN_FACE]);
     build_screen_clock(s_screens[SCREEN_CLOCK]);
     build_screen_weather(s_screens[SCREEN_WEATHER]);
-    build_screen_wifi(s_screens[SCREEN_WIFI]);
+    build_screen_sync(s_screens[SCREEN_SYNC]);
+    build_screen_portal(s_screens[SCREEN_PORTAL]);
     build_screen_birthday(s_screens[SCREEN_BIRTHDAY]);
 
     lv_disp_load_scr(s_screens[SCREEN_SPLASH]);
@@ -294,7 +301,7 @@ static void build_screen_face(lv_obj_t *parent)
 /* --- WiFi setup screen --- */
 static lv_obj_t *s_lbl_wifi_info = NULL;
 
-static void build_screen_wifi(lv_obj_t *parent)
+static void build_screen_portal(lv_obj_t *parent)
 {
     /* Title */
     lv_obj_t *lbl_hdr = lv_label_create(parent);
@@ -376,6 +383,27 @@ static void build_screen_weather(lv_obj_t *parent)
     }
 }
 
+static void build_screen_sync(lv_obj_t *parent)
+{
+    s_lbl_sync_title = lv_label_create(parent);
+    lv_label_set_text(s_lbl_sync_title, "Sync");
+    lv_obj_set_style_text_color(s_lbl_sync_title, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_sync_title, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_lbl_sync_title, LV_ALIGN_TOP_MID, 0, 10);
+
+    s_lbl_sync_status = lv_label_create(parent);
+    lv_label_set_text(s_lbl_sync_status, "Hold to update");
+    lv_obj_set_style_text_color(s_lbl_sync_status, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_sync_status, &lv_font_montserrat_10, 0);
+    lv_obj_align(s_lbl_sync_status, LV_ALIGN_CENTER, 0, 4);
+
+    s_lbl_sync_last = lv_label_create(parent);
+    lv_label_set_text(s_lbl_sync_last, "Last: --");
+    lv_obj_set_style_text_color(s_lbl_sync_last, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_lbl_sync_last, &lv_font_montserrat_10, 0);
+    lv_obj_align(s_lbl_sync_last, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Timer callbacks                                                            */
 /* -------------------------------------------------------------------------- */
@@ -436,11 +464,14 @@ void display_next_screen(void)
         s_current_screen = SCREEN_WEATHER;
         break;
     case SCREEN_WEATHER:
+        s_current_screen = SCREEN_SYNC;
+        break;
+    case SCREEN_SYNC:
         s_current_screen = SCREEN_FACE;
         break;
     case SCREEN_SPLASH:
     case SCREEN_BIRTHDAY:
-    case SCREEN_WIFI:
+    case SCREEN_PORTAL:
     default:
         s_current_screen = SCREEN_FACE;
         break;
@@ -486,8 +517,8 @@ void display_show_wifi_setup(void)
 {
     eye_anim_set_idle(false);
     lvgl_port_lock(0);
-    s_current_screen = SCREEN_WIFI;
-    lv_disp_load_scr(s_screens[SCREEN_WIFI]);
+    s_current_screen = SCREEN_PORTAL;
+    lv_disp_load_scr(s_screens[SCREEN_PORTAL]);
     lvgl_port_unlock();
     ESP_LOGI(TAG, "%s", "WiFi setup screen shown");
 }
@@ -798,4 +829,59 @@ static void splash_timer_cb(lv_timer_t *timer)
         lv_timer_del(s_splash_timer);
         s_splash_timer = NULL;
     }
+}
+
+void display_show_sync_status(const char *line1, const char *line2)
+{
+    lvgl_port_lock(0);
+
+    if (s_lbl_sync_title) {
+        lv_label_set_text(s_lbl_sync_title, line1 ? line1 : "Sync");
+    }
+
+    if (s_lbl_sync_status) {
+        lv_label_set_text(s_lbl_sync_status, line2 ? line2 : "Hold to update");
+    }
+
+    lvgl_port_unlock();
+}
+
+void display_show_sync_idle(bool ok)
+{
+    char last_buf[24];
+
+    time_t now = time(NULL);
+    struct tm tm_now;
+
+    localtime_r(&now, &tm_now);
+
+    if (now > 1700000000) {
+        snprintf(last_buf,
+                 sizeof(last_buf),
+                 "Last: %s %02d:%02d",
+                 ok ? "OK" : "FAIL",
+                 tm_now.tm_hour,
+                 tm_now.tm_min);
+    } else {
+        snprintf(last_buf,
+                 sizeof(last_buf),
+                 "Last: %s",
+                 ok ? "OK" : "FAIL");
+    }
+
+    lvgl_port_lock(0);
+
+    if (s_lbl_sync_title) {
+        lv_label_set_text(s_lbl_sync_title, "Sync");
+    }
+
+    if (s_lbl_sync_status) {
+        lv_label_set_text(s_lbl_sync_status, "Hold to update");
+    }
+
+    if (s_lbl_sync_last) {
+        lv_label_set_text(s_lbl_sync_last, last_buf);
+    }
+
+    lvgl_port_unlock();
 }

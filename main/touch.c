@@ -5,7 +5,7 @@
  * Long press on SCREEN_FACE    -> play random eye combo reaction
  * Long press on SCREEN_WEATHER -> toggle current weather / forecast view
  * Long press on SCREEN_CLOCK   -> WiFi setup portal
- * Long press on SCREEN_WIFI    -> stop portal and return to clock
+ * Long press on SCREEN_PORTAL    -> stop portal and return to clock
  *
  * Uses ANYEDGE: falling = press start, rising = press end.
  * Hold duration is measured in button task. ISR stays minimal.
@@ -26,6 +26,7 @@
 #include "touch.h"
 #include "wifi_manager.h"
 #include "eye_anim.h"
+#include "weather.h"
 
 static const char *TAG = "touch";
 
@@ -116,7 +117,7 @@ static void button_task(void *arg)
                     /* Short press */
                     ESP_LOGI(TAG, "Short press (%lu ms)", (unsigned long)pdTICKS_TO_MS(held));
 
-                    if (display_get_screen() == SCREEN_WIFI)
+                    if (display_get_screen() == SCREEN_PORTAL)
                     {
                         ESP_LOGI(TAG, "Short press ignored on WiFi setup screen");
                         continue;
@@ -179,11 +180,18 @@ static void button_task(void *arg)
                     display_show_wifi_setup();
                     wifi_manager_start_portal();
                 }
-                else if (display_get_screen() == SCREEN_WIFI)
+                else if (display_get_screen() == SCREEN_PORTAL)
                 {
                     ESP_LOGI(TAG, "Long press on WiFi setup -> exit");
                     wifi_manager_stop_portal();
                     display_set_screen(SCREEN_CLOCK);
+                }
+                else if (display_get_screen() == SCREEN_SYNC)
+                {
+                    ESP_LOGI(TAG, "Long press on sync -> request update");
+
+                    display_show_sync_status("Syncing...", "WiFi...");
+                    weather_request_update();
                 }
             }
         }

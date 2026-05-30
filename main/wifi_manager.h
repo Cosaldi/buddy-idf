@@ -25,7 +25,7 @@
 #define WIFI_MAX_RETRY 5
 
 /* Maximum time to wait for one connection attempt. */
-#define WIFI_CONNECT_TIMEOUT_MS 15000
+#define WIFI_CONNECT_TIMEOUT_MS 30000
 
 /* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
