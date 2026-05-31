@@ -129,6 +129,12 @@ void eye_anim_play_combo(eye_combo_t combo);
  */
 void eye_anim_play_random_combo(void);
 
+void eye_anim_prepare_wake_frame(void);
+void eye_anim_play_wake(void);
+void eye_anim_play_sleep(void);
+void eye_anim_pause(void);
+void eye_anim_resume(void);
+
 #ifdef __cplusplus
 }
 #endif

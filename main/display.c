@@ -731,6 +731,11 @@ bool display_is_suspended(void)
     return !s_display_on;
 }
 
+bool display_is_eye_screen(void)
+{
+    return s_current_screen == SCREEN_FACE;
+}
+
 static void eye_test_all_task(void *arg)
 {
     (void)arg;

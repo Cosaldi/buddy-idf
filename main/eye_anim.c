@@ -48,6 +48,7 @@
 /* -------------------------------------------------------------------------- */
 
 #include "eye_anim.h"
+#include "power_state.h"
 
 #include "esp_log.h"
 #include "esp_random.h"
@@ -93,7 +94,21 @@
 #define EXPR_HOLD_MIN 1500
 #define EXPR_HOLD_MAX 3000
 
+/* -------------------------------------------------------------------------- */
+/* Statics                                                                    */
+/* -------------------------------------------------------------------------- */
+
 static const char *TAG = "eye_anim";
+
+static bool s_eye_paused = false;
+static bool s_wake_anim_active = false;
+static bool s_sleep_anim_active = false;
+
+static int s_wake_anim_step = 0;
+static int s_sleep_anim_step = 0;
+
+static float s_wake_h_scale = 1.0f;
+static float s_sleep_h_scale = 1.0f;
 
 /* -------------------------------------------------------------------------- */
 /* Internal types and state                                                    */
@@ -432,43 +447,43 @@ static void draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, lv_col
 #define COMBO_DEF(arr, combo_name) {arr, sizeof(arr) / sizeof((arr)[0]), combo_name}
 
 static const eye_combo_step_t s_combo_cute[] = {
-    { EYE_EXPR_NORMAL, 150, false },
-    { EYE_EXPR_HAPPY,  350, true  },
-    { EYE_EXPR_CUTE,   550, true  },
-    { EYE_EXPR_HAPPY,  350, true  },
-    { EYE_EXPR_NORMAL, 250, true  },
+    {EYE_EXPR_NORMAL, 150, false},
+    {EYE_EXPR_HAPPY, 350, true},
+    {EYE_EXPR_CUTE, 550, true},
+    {EYE_EXPR_HAPPY, 350, true},
+    {EYE_EXPR_NORMAL, 250, true},
 };
 
 static const eye_combo_step_t s_combo_confused[] = {
-    { EYE_EXPR_NORMAL,     150, false },
-    { EYE_EXPR_WONDER,     600, true  },
-    { EYE_EXPR_SUSPICIOUS, 450, true  },
-    { EYE_EXPR_WONDER,     500, true  },
-    { EYE_EXPR_NORMAL,     250, true  },
+    {EYE_EXPR_NORMAL, 150, false},
+    {EYE_EXPR_WONDER, 600, true},
+    {EYE_EXPR_SUSPICIOUS, 450, true},
+    {EYE_EXPR_WONDER, 500, true},
+    {EYE_EXPR_NORMAL, 250, true},
 };
 
 static const eye_combo_step_t s_combo_love[] = {
-    { EYE_EXPR_NORMAL, 150, false },
-    { EYE_EXPR_CUTE,   350, true  },
-    { EYE_EXPR_LOVE,   700, true  },
-    { EYE_EXPR_HAPPY,  450, true  },
-    { EYE_EXPR_NORMAL, 250, true  },
+    {EYE_EXPR_NORMAL, 150, false},
+    {EYE_EXPR_CUTE, 350, true},
+    {EYE_EXPR_LOVE, 700, true},
+    {EYE_EXPR_HAPPY, 450, true},
+    {EYE_EXPR_NORMAL, 250, true},
 };
 
 static const eye_combo_step_t s_combo_sleepy[] = {
-    { EYE_EXPR_NORMAL, 200, false },
-    { EYE_EXPR_SLEEPY, 600, true  },
-    { EYE_EXPR_CLOSE,  500, false },
-    { EYE_EXPR_SLEEPY, 450, true  },
-    { EYE_EXPR_NORMAL, 300, true  },
+    {EYE_EXPR_NORMAL, 200, false},
+    {EYE_EXPR_SLEEPY, 600, true},
+    {EYE_EXPR_CLOSE, 500, false},
+    {EYE_EXPR_SLEEPY, 450, true},
+    {EYE_EXPR_NORMAL, 300, true},
 };
 
 static const eye_combo_step_t s_combo_grumpy[] = {
-    { EYE_EXPR_NORMAL,     150, false },
-    { EYE_EXPR_SUSPICIOUS, 500, true  },
-    { EYE_EXPR_ANGRY,      450, true  },
-    { EYE_EXPR_UPSET,      600, true  },
-    { EYE_EXPR_NORMAL,     300, true  },
+    {EYE_EXPR_NORMAL, 150, false},
+    {EYE_EXPR_SUSPICIOUS, 500, true},
+    {EYE_EXPR_ANGRY, 450, true},
+    {EYE_EXPR_UPSET, 600, true},
+    {EYE_EXPR_NORMAL, 300, true},
 };
 
 static const eye_combo_def_t s_combos[] = {
@@ -485,6 +500,81 @@ static const eye_combo_def_t s_combos[] = {
 
 static void render_frame(void)
 {
+    if (s_eye_paused)
+    {
+        return;
+    }
+
+    if (s_wake_anim_active)
+    {
+        if (s_wake_anim_step < 4)
+        {
+            g.expr = EYE_EXPR_CLOSE;
+            s_wake_h_scale = 0.12f;
+        }
+        else if (s_wake_anim_step < 10)
+        {
+            g.expr = EYE_EXPR_SLEEPY;
+            s_wake_h_scale = 0.20f + ((float)(s_wake_anim_step - 4) / 6.0f) * 0.30f;
+        }
+        else if (s_wake_anim_step < 18)
+        {
+            g.expr = EYE_EXPR_SLEEPY;
+            s_wake_h_scale = 0.50f + ((float)(s_wake_anim_step - 10) / 8.0f) * 0.50f;
+        }
+        else if (s_wake_anim_step < 24)
+        {
+            g.expr = EYE_EXPR_NORMAL;
+            s_wake_h_scale = 1.0f;
+        }
+        else
+        {
+            s_wake_anim_active = false;
+            s_wake_anim_step = 0;
+            s_wake_h_scale = 1.0f;
+
+            g.expr = EYE_EXPR_NORMAL;
+            buddy_power_finish_wake_anim();
+        }
+
+        s_wake_anim_step++;
+    }
+
+    if (s_sleep_anim_active)
+    {
+        if (s_sleep_anim_step < 6)
+        {
+            g.expr = EYE_EXPR_NORMAL;
+            s_sleep_h_scale = 1.0f;
+        }
+        else if (s_sleep_anim_step < 18)
+        {
+            g.expr = EYE_EXPR_SLEEPY;
+
+            float t = (float)(s_sleep_anim_step - 6) / 12.0f;
+            s_sleep_h_scale = 1.0f - (t * 0.85f); // 1.0 -> 0.15
+        }
+        else if (s_sleep_anim_step < 24)
+        {
+            g.expr = EYE_EXPR_CLOSE;
+            s_sleep_h_scale = 0.12f;
+        }
+        else
+        {
+            s_sleep_anim_active = false;
+            s_sleep_anim_step = 0;
+            s_sleep_h_scale = 1.0f;
+
+            g.expr = EYE_EXPR_CLOSE;
+            render_frame(); // draw final closed eyes once
+
+            buddy_power_finish_sleep_anim();
+            return;
+        }
+
+        s_sleep_anim_step++;
+    }
+
     lv_canvas_fill_bg(g.canvas, lv_color_black(), LV_OPA_COVER);
 
     const lv_color_t white = lv_color_white();
@@ -505,6 +595,16 @@ static void render_frame(void)
         h_scale = (float)g.blink_step / BLINK_STEPS;
     }
 
+    if (s_wake_anim_active)
+    {
+        h_scale = s_wake_h_scale;
+    }
+
+    if (s_sleep_anim_active)
+    {
+        h_scale = s_sleep_h_scale;
+    }
+    
     /* Base height multiplier per expression. */
     float expr_h = 1.0f;
     if (g.expr == EYE_EXPR_HAPPY)
@@ -1068,4 +1168,62 @@ void eye_anim_set_idle(bool enable)
         g.expr_return_ms = 0;
         g.expr = EYE_EXPR_NORMAL;
     }
+}
+
+void eye_anim_prepare_wake_frame(void)
+{
+    s_eye_paused = false;
+    s_wake_anim_active = false;
+    s_wake_anim_step = 0;
+
+    g.expr = EYE_EXPR_CLOSE;
+    g.blink_phase = BLINK_IDLE;
+    g.blink_step = 0;
+    g.cur_dx = 0;
+    g.cur_dy = 0;
+
+    render_frame();
+}
+
+void eye_anim_play_wake(void)
+{
+    s_eye_paused = false;
+    s_wake_anim_active = true;
+    s_wake_anim_step = 0;
+
+    g.expr = EYE_EXPR_CLOSE;
+    g.blink_phase = BLINK_IDLE;
+    g.blink_step = 0;
+    g.cur_dx = 0;
+    g.cur_dy = 0;
+}
+
+void eye_anim_play_sleep(void)
+{
+    s_eye_paused = false;
+
+    s_wake_anim_active = false;
+    s_wake_anim_step = 0;
+
+    s_sleep_anim_active = true;
+    s_sleep_anim_step = 0;
+    s_sleep_h_scale = 1.0f;
+
+    g.expr = EYE_EXPR_NORMAL;
+    g.blink_phase = BLINK_IDLE;
+    g.blink_step = 0;
+    g.cur_dx = 0;
+    g.cur_dy = 0;
+}
+
+void eye_anim_pause(void)
+{
+    s_eye_paused = true;
+    s_wake_anim_active = false;
+    s_wake_anim_step = 0;
+}
+
+void eye_anim_resume(void)
+{
+    s_eye_paused = false;
 }

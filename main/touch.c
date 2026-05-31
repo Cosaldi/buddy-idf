@@ -24,6 +24,7 @@
 
 #include "display.h"
 #include "touch.h"
+#include "power_state.h"
 #include "wifi_manager.h"
 #include "eye_anim.h"
 #include "weather.h"
@@ -78,6 +79,19 @@ static void button_task(void *arg)
                 continue;
             }
             last_tick = ev.tick;
+
+            /*
+             * If Buddy is sleeping, this touch only wakes it.
+             * Do not process normal button action.
+             */
+            if (buddy_power_is_sleeping())
+            {
+                buddy_power_activity();
+                continue;
+            }
+
+            /* Awake: reset inactivity timer, then process normal touch */
+            buddy_power_activity();
 
             if (ev.level == BUTTON_ACTIVE_LEVEL)
             {

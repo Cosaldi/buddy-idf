@@ -9,6 +9,7 @@ idf_component_register(
         "display.c"
         "eye_anim.c"
         "battery.c"
+        "power_state.c"
     INCLUDE_DIRS
         "."
     REQUIRES

@@ -79,6 +79,8 @@ uint32_t display_get_last_activity_ms(void);
 /** @brief Returns true if display is currently suspended. */
 bool display_is_suspended(void);
 
+bool display_is_eye_screen(void);
+
 void display_show_splash(void);
 void display_show_birthday(void);
 void display_finish_splash(void);
