@@ -17,9 +17,10 @@ extern "C" {
 /* -------------------------------------------------------------------------- */
 
 typedef enum {
-    BATTERY_LEVEL_LOW = 0,
-    BATTERY_LEVEL_MID,
-    BATTERY_LEVEL_HIGH,
+    BAT_LEVEL_HIGH = 0,
+    BAT_LEVEL_MEDIUM,
+    BAT_LEVEL_LOW,
+    BAT_LEVEL_ALMOST_DEAD,
 } battery_level_t;
 
 /* -------------------------------------------------------------------------- */
@@ -29,6 +30,7 @@ typedef enum {
 void battery_init(void);
 
 float battery_get_voltage(void);
+int battery_get_voltage_mv(void);
 
 battery_level_t battery_get_level(void);
 

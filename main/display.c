@@ -346,7 +346,7 @@ static void build_screen_clock(lv_obj_t *parent)
     lv_obj_align(s_lbl_date, LV_ALIGN_CENTER, 0, 16);
 
     s_lbl_battery = lv_label_create(parent);
-    lv_label_set_text(s_lbl_battery, "BAT:-");
+    lv_label_set_text(s_lbl_battery, "--");
     lv_obj_set_style_text_color(s_lbl_battery, lv_color_white(), 0);
     lv_obj_set_style_text_font(s_lbl_battery, &lv_font_montserrat_10, 0);
     lv_obj_align(s_lbl_battery, LV_ALIGN_TOP_RIGHT, -2, 2);
