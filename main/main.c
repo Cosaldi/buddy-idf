@@ -26,7 +26,8 @@ static void power_on_awake(void)
 {
     ESP_LOGI(TAG, "Buddy awake");
 
-    display_resume(); // later: OLED on + eye resume
+    display_resume();
+    eye_anim_resume();
 }
 
 static void power_on_sleep(void)
@@ -41,27 +42,39 @@ static void power_on_wake_anim(void)
 {
     ESP_LOGI(TAG, "Buddy wake animation");
 
-    eye_anim_prepare_wake_frame(); // draw closed eyes while display still off
-    display_resume();              // OLED turns on already showing closed eyes
-    eye_anim_play_wake();          // continue animation
+    if (display_is_face_screen())
+    {
+        eye_anim_prepare_wake_frame();
+        display_resume();
+        eye_anim_play_wake();
+        return;
+    }
+
+    /*
+     * Non-face screens do not run eye animation.
+     * Wake display directly and finish wake state immediately.
+     */
+    display_resume();
+    buddy_power_finish_wake_anim();
 }
 
 static void power_on_sleep_anim(void)
 {
-    ESP_LOGI(TAG, "Buddy sleep animation");
-    if (display_is_eye_screen())
+    bool is_face = display_is_face_screen();
+
+    ESP_LOGI(TAG, "Buddy sleep animation, face_screen=%d", is_face);
+
+    if (is_face)
     {
         display_resume();
         eye_anim_play_sleep();
         return;
     }
 
-    /*
-     * Other screens do not run eye animation,
-     * so skip directly to real sleep.
-     */
-    buddy_power_skip_sleep_anim();
+    ESP_LOGI(TAG, "Non-face screen: skip eye animation");
+    buddy_power_finish_sleep_anim();
 }
+
 
 /* ── Forward declaration ─────────────────────────────────────────────── */
 static void main_task(void *arg);
@@ -84,7 +97,7 @@ void app_main(void)
     display_init();
 
     buddy_power_config_t power_cfg = {
-        .sleep_after_ms = 30 * 1000,
+        .sleep_after_ms = 90 * 1000,
     };
 
     buddy_power_callbacks_t power_cb = {

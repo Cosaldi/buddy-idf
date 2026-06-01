@@ -90,6 +90,17 @@ static void button_task(void *arg)
                 continue;
             }
 
+            /*
+            * If Buddy is doing sleep/wake animation, do not allow
+            * screen change yet. This prevents WAKE_ANIM getting stuck
+            * when user presses button during animation.
+            */
+            if (buddy_power_is_busy())
+            {
+                buddy_power_activity();
+                continue;
+            }
+
             /* Awake: reset inactivity timer, then process normal touch */
             buddy_power_activity();
 

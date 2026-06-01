@@ -15,10 +15,18 @@
 #include <sys/_types.h>
 
 /* -------------------------------------------------------------------------- */
+/* Defines                                                                    */
+/* -------------------------------------------------------------------------- */
+
+#define SLEEP_ANIM_MAX_MS 2000
+
+/* -------------------------------------------------------------------------- */
 /* Static variables                                                           */
 /* -------------------------------------------------------------------------- */
 
 static const char *TAG = "power_state";
+
+static int64_t s_state_started_ms = 0;
 
 static buddy_power_state_t s_state = BUDDY_POWER_AWAKE;
 
@@ -42,6 +50,7 @@ static void set_state(buddy_power_state_t new_state)
     }
 
     s_state = new_state;
+    s_state_started_ms = now_ms();
 
     switch (s_state)
     {
@@ -102,6 +111,15 @@ void buddy_power_init(const buddy_power_config_t *config, const buddy_power_call
 
 void buddy_power_tick(void)
 {
+    int64_t now = now_ms();
+    if (s_state == BUDDY_POWER_SLEEP_ANIM) {
+        if ((now - s_state_started_ms) >= SLEEP_ANIM_MAX_MS) {
+            ESP_LOGW(TAG, "sleep animation timeout, forcing sleep");
+            set_state(BUDDY_POWER_SLEEPING);
+        }
+        return;
+    }
+    
     if (s_state != BUDDY_POWER_AWAKE)
     {
         return;
@@ -189,4 +207,15 @@ bool buddy_power_is_sleeping(void)
 bool buddy_power_is_awake(void)
 {
     return s_state == BUDDY_POWER_AWAKE;
+}
+
+bool buddy_power_is_wake_anim(void)
+{
+    return s_state == BUDDY_POWER_WAKE_ANIM;
+}
+
+bool buddy_power_is_busy(void)
+{
+    return s_state == BUDDY_POWER_WAKE_ANIM ||
+           s_state == BUDDY_POWER_SLEEP_ANIM;
 }

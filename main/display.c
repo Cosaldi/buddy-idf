@@ -705,20 +705,34 @@ void display_reset_activity(void)
 void display_suspend(void)
 {
     if (!s_display_on)
+    {
         return;
+    }
+
     ESP_LOGI(TAG, "Suspending display (idle timeout)");
-    esp_lcd_panel_disp_on_off(s_panel, false);
+
+    lvgl_port_lock(0);
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, false));
+    lvgl_port_unlock();
+
     s_display_on = false;
 }
 
 void display_resume(void)
 {
     if (s_display_on)
+    {
         return;
+    }
+
     ESP_LOGI(TAG, "Resuming display");
-    esp_lcd_panel_disp_on_off(s_panel, true);
-    s_display_on = true;
+
+    lvgl_port_lock(0);
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, true));
     lv_disp_trig_activity(s_disp);
+    lvgl_port_unlock();
+
+    s_display_on = true;
 }
 
 uint32_t display_get_last_activity_ms(void)
@@ -731,7 +745,7 @@ bool display_is_suspended(void)
     return !s_display_on;
 }
 
-bool display_is_eye_screen(void)
+bool display_is_face_screen(void)
 {
     return s_current_screen == SCREEN_FACE;
 }

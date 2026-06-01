@@ -50,9 +50,11 @@ extern "C"
     void buddy_power_skip_sleep_anim(void);
 
     buddy_power_state_t buddy_power_get_state(void);
-    
+
     bool buddy_power_is_sleeping(void);
     bool buddy_power_is_awake(void);
+    bool buddy_power_is_wake_anim(void);
+    bool buddy_power_is_busy(void);
 
 #ifdef __cplusplus
 }
