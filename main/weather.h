@@ -26,10 +26,10 @@
 #define WEATHER_API_KEY ""
 #endif
 
-#define WEATHER_CITY          "Bandung"
-#define WEATHER_COUNTRY_CODE  "ID"
-#define WEATHER_UNITS         "metric"
-#define WEATHER_LANG          "en"
+#define WEATHER_CITY "Bandung"
+#define WEATHER_COUNTRY_CODE "ID"
+#define WEATHER_UNITS "metric"
+#define WEATHER_LANG "en"
 
 /* How often to re-fetch (seconds). Free OWM updates every 60 min. */
 #define WEATHER_UPDATE_INTERVAL_S 3600
@@ -37,26 +37,28 @@
 /* Show next 3 future forecast slots, e.g. 21:00, 00:00, 03:00 */
 #define WEATHER_FORECAST_MAX 3
 
-
 /* -------------------------------------------------------------------------- */
 /* Data types                                                                 */
 /* -------------------------------------------------------------------------- */
 
-typedef struct {
+typedef struct
+{
     float temp_c;
     float feels_like_c;
-    int   humidity;
-    char  condition[32];
-    char  description[48];
-    bool  valid;
+    int humidity;
+    char condition[32];
+    char description[48];
+    bool valid;
 } weather_data_t;
 
-typedef struct {
+typedef struct
+{
     time_t timestamp;
-    char   time[8];        /* "21:00" */
-    char   condition[32];  /* "Clouds", "Rain", "Clear" */
-    float  temp_c;
-    bool   valid;
+    char time[8];       /* "21:00" */
+    char condition[32]; /* "Clouds", "Rain", "Clear" */
+    float temp_c;
+    bool valid;
+    int pop_percent;
 } weather_forecast_item_t;
 
 /**

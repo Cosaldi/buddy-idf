@@ -367,7 +367,7 @@ static void build_screen_weather(lv_obj_t *parent)
     lv_obj_align(s_lbl_weather_cond, LV_ALIGN_CENTER, 0, -8);
 
     s_lbl_weather_temp = lv_label_create(parent);
-    lv_label_set_text(s_lbl_weather_temp, "--.-C");
+    lv_label_set_text(s_lbl_weather_temp, "--.-C ---");
     lv_obj_set_style_text_color(s_lbl_weather_temp, lv_color_white(), 0);
     lv_obj_set_style_text_font(s_lbl_weather_temp, &lv_font_montserrat_14, 0);
     lv_obj_align(s_lbl_weather_temp, LV_ALIGN_CENTER, 0, 14);
@@ -605,15 +605,15 @@ static void display_update_weather_forecast_locked(void)
 
             /*
              * Example:
-             * 21:00 25.8C Rain
+             * 21:00 25.8C Rain 99%
              */
-            snprintf(row, sizeof(row), "%s %.0fC %.8s", item.time, item.temp_c, item.condition);
+            snprintf(row, sizeof(row), "%s %.0fC %.8s %d%%", item.time, item.temp_c, item.condition, item.pop_percent);
 
             lv_label_set_text(s_lbl_forecast[i], row);
         }
         else
         {
-            lv_label_set_text(s_lbl_forecast[i], "--:-- --.-C ---");
+            lv_label_set_text(s_lbl_forecast[i], "--:-- --.-C --- ---");
         }
     }
 }
@@ -655,7 +655,7 @@ void display_weather_toggle_forecast(void)
 /* Weather update                                                             */
 /* -------------------------------------------------------------------------- */
 
-void display_update_weather(const char *condition, float temp_c)
+void display_update_weather(const char *condition, float temp_c, int humidity)
 {
     if (!condition)
     {
@@ -663,7 +663,7 @@ void display_update_weather(const char *condition, float temp_c)
     }
 
     char temp_str[16];
-    snprintf(temp_str, sizeof(temp_str), "%.1f C", temp_c);
+    snprintf(temp_str, sizeof(temp_str), "%.1fC H%d%%", temp_c, humidity);
 
     lvgl_port_lock(0);
 

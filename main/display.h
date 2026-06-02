@@ -57,7 +57,7 @@ void display_show_wifi_setup(void);
 void display_face_next_expression(void);
 
 /** @brief Update weather data. Safe to call from any task. */
-void display_update_weather(const char *condition, float temp_c);
+void display_update_weather(const char *condition, float temp_c, int humidity);
 
 void display_weather_toggle_forecast(void);
 

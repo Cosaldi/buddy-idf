@@ -173,7 +173,7 @@ static bool parse_weather(const char *json, weather_data_t *out)
     /* temp, feels_like, humidity — all inside "main":{...} */
     ok &= json_get_float(json, "temp", &out->temp_c);
     ok &= json_get_float(json, "feels_like", &out->feels_like_c);
-    json_get_int(json, "humidity", &out->humidity); /* optional */
+    ok &= json_get_int(json, "humidity", &out->humidity); /* optional */
 
     /* weather[0].main and .description — first occurrence in array */
     if (!json_get_string(json, "main", out->condition, sizeof(out->condition)))
@@ -233,15 +233,32 @@ static bool parse_forecast(const char *json)
 
         char condition[32] = "N/A";
         float temp_c = 0.0f;
+        float pop = 0.0f;
+        int pop_percent = 0;
 
         json_get_float_from_object(dt_pos, "temp", &temp_c);
         json_get_string(dt_pos, "main", condition, sizeof(condition));
+
+        if (json_get_float_from_object(dt_pos, "pop", &pop))
+        {
+            pop_percent = (int)(pop * 100.0f + 0.5f);
+
+            if (pop_percent < 0)
+            {
+                pop_percent = 0;
+            }
+            else if (pop_percent > 100)
+            {
+                pop_percent = 100;
+            }
+        }
 
         weather_forecast_item_t *item = &s_forecast[s_forecast_count];
 
         item->timestamp = ts;
         item->temp_c = temp_c;
         item->valid = true;
+        item->pop_percent = pop_percent;
 
         strncpy(item->condition, condition, sizeof(item->condition) - 1);
         item->condition[sizeof(item->condition) - 1] = '\0';
@@ -251,11 +268,12 @@ static bool parse_forecast(const char *json)
         snprintf(item->time, sizeof(item->time), "%02d:%02d", tm_local.tm_hour, tm_local.tm_min);
 
         ESP_LOGI(TAG,
-                 "Forecast[%d]: %s %.1f C %s",
+                 "Forecast[%d]: %s %.1f C %s pop=%d%%",
                  s_forecast_count,
                  item->time,
                  item->temp_c,
-                 item->condition);
+                 item->condition,
+                 item->pop_percent);
 
         s_forecast_count++;
 
@@ -341,7 +359,7 @@ static void fetch_weather(void)
                      s_data.feels_like_c,
                      s_data.humidity);
 
-            display_update_weather(s_data.condition, s_data.temp_c);
+            display_update_weather(s_data.condition, s_data.temp_c, s_data.humidity);
         }
         else
         {
