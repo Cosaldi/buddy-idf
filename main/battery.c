@@ -117,6 +117,44 @@ static const char *level_to_text(battery_level_t level)
     }
 }
 
+static int voltage_to_percent(int battery_mv)
+{
+    /*
+     * Simple 1-cell LiPo voltage-to-percent approximation.
+     * Output is rounded to nearest 5%.
+     *
+     * 4200mV = 100%
+     * 3300mV = 5%
+     * below 3300mV = 0%
+     */
+    if (battery_mv >= 4200)
+    {
+        return 100;
+    }
+
+    if (battery_mv <= 3300)
+    {
+        return 0;
+    }
+
+    int percent = ((battery_mv - 3300) * 100) / (4200 - 3300);
+
+    /*
+     * Round down to nearest 5.
+     * Example:
+     * 87 -> 85
+     * 63 -> 60
+     */
+    percent = (percent / 5) * 5;
+
+    if (percent < 5)
+    {
+        percent = 5;
+    }
+
+    return percent;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -157,4 +195,9 @@ battery_level_t battery_get_level(void)
 const char *battery_get_level_text(void)
 {
     return level_to_text(battery_get_level());
+}
+
+int battery_get_percent(void)
+{
+    return voltage_to_percent(battery_read_mv());
 }

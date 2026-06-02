@@ -432,7 +432,7 @@ static void clock_timer_cb(lv_timer_t *timer)
 
     if (s_lbl_battery && (now_ms - s_last_battery_update_ms >= 30000))
     {
-        lv_label_set_text(s_lbl_battery, battery_get_level_text());
+        lv_label_set_text_fmt(s_lbl_battery, "%d%%", battery_get_percent());
         s_last_battery_update_ms = now_ms;
     }
     // ESP_LOGI("BAT", "Voltage: %.2f", battery_get_voltage());
@@ -854,11 +854,13 @@ void display_show_sync_status(const char *line1, const char *line2)
 {
     lvgl_port_lock(0);
 
-    if (s_lbl_sync_title) {
+    if (s_lbl_sync_title)
+    {
         lv_label_set_text(s_lbl_sync_title, line1 ? line1 : "Sync");
     }
 
-    if (s_lbl_sync_status) {
+    if (s_lbl_sync_status)
+    {
         lv_label_set_text(s_lbl_sync_status, line2 ? line2 : "Hold to update");
     }
 
@@ -874,31 +876,34 @@ void display_show_sync_idle(bool ok)
 
     localtime_r(&now, &tm_now);
 
-    if (now > 1700000000) {
+    if (now > 1700000000)
+    {
         snprintf(last_buf,
                  sizeof(last_buf),
                  "Last: %s %02d:%02d",
                  ok ? "OK" : "FAIL",
                  tm_now.tm_hour,
                  tm_now.tm_min);
-    } else {
-        snprintf(last_buf,
-                 sizeof(last_buf),
-                 "Last: %s",
-                 ok ? "OK" : "FAIL");
+    }
+    else
+    {
+        snprintf(last_buf, sizeof(last_buf), "Last: %s", ok ? "OK" : "FAIL");
     }
 
     lvgl_port_lock(0);
 
-    if (s_lbl_sync_title) {
+    if (s_lbl_sync_title)
+    {
         lv_label_set_text(s_lbl_sync_title, "Sync");
     }
 
-    if (s_lbl_sync_status) {
+    if (s_lbl_sync_status)
+    {
         lv_label_set_text(s_lbl_sync_status, "Hold to update");
     }
 
-    if (s_lbl_sync_last) {
+    if (s_lbl_sync_last)
+    {
         lv_label_set_text(s_lbl_sync_last, last_buf);
     }
 

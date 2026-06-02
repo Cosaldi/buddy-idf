@@ -36,6 +36,8 @@ battery_level_t battery_get_level(void);
 
 const char *battery_get_level_text(void);
 
+int battery_get_percent(void);
+
 #ifdef __cplusplus
 }
 #endif
