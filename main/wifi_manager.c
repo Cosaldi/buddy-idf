@@ -36,6 +36,8 @@
 #define PORTAL_HTML_MAX 4096
 #define WIFI_RETRY_LATER_MS (60UL * 60UL * 1000UL)
 
+#define WIFI_TX_POWER_LIMIT 8
+
 /* -------------------------------------------------------------------------- */
 /* Static variables                                                           */
 /* -------------------------------------------------------------------------- */
@@ -271,6 +273,20 @@ static bool connect_sta(const char *ssid, const char *pass)
 
     s_connecting = false;
     return false;
+}
+
+static void apply_wifi_tx_power_limit(void)
+{
+    esp_err_t err = esp_wifi_set_max_tx_power(WIFI_TX_POWER_LIMIT);
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to set WiFi TX power: %s", esp_err_to_name(err));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "WiFi TX power limited to %.2f dBm",
+                 WIFI_TX_POWER_LIMIT * 0.25f);
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -889,6 +905,8 @@ void wifi_manager_start_portal(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    apply_wifi_tx_power_limit();
 
     ESP_LOGI(TAG, "SoftAP started: SSID=%s, IP=192.168.4.1", WIFI_AP_SSID);
 
